@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: valuate
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: node server/index.cjs
+    envVars:
+      - key: NODE_ENV
+        value: production
