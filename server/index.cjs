@@ -10,6 +10,7 @@ const yf = new YahooFinance({ suppressNotices: ['yahooSurvey'], validation: { lo
 const YF_OPTS = { validateResult: false };
 const app = express();
 app.use(cors());
+app.use((req, res, next) => { console.log('REQ:', req.method, req.path); next(); });
 
 const YF_HEADERS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' };
 const PERIOD1 = 1451606400; // 2016-01-01
