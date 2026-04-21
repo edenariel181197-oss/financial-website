@@ -6,7 +6,8 @@ const express = require('express');
 const cors = require('cors');
 const YahooFinance = require('yahoo-finance2').default;
 
-const yf = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+const yf = new YahooFinance({ suppressNotices: ['yahooSurvey'], validation: { logErrors: false, logOptionsErrors: false } });
+const YF_OPTS = { validateResult: false };
 const app = express();
 app.use(cors());
 
@@ -53,8 +54,8 @@ app.get('/api/quote/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
     const [q, stats] = await Promise.all([
-      yf.quote(t),
-      yf.quoteSummary(t, { modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail'] }),
+      yf.quote(t, {}, YF_OPTS),
+      yf.quoteSummary(t, { modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail'] }, YF_OPTS),
     ]);
     const fin = stats.financialData;
     const kstats = stats.defaultKeyStatistics;
@@ -218,7 +219,7 @@ app.get('/api/cashflow/:ticker', async (req, res) => {
 app.get('/api/ratios/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const data = await yf.quoteSummary(t, { modules: ['financialData'] });
+    const data = await yf.quoteSummary(t, { modules: ['financialData'] }, YF_OPTS);
     const fin = data.financialData;
     res.json({
       currentRatioTTM: fin?.currentRatio,
@@ -285,7 +286,7 @@ app.get('/api/charts/:ticker', async (req, res) => {
 app.get('/api/estimates/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const data = await yf.quoteSummary(t, { modules: ['earningsTrend', 'defaultKeyStatistics'] });
+    const data = await yf.quoteSummary(t, { modules: ['earningsTrend', 'defaultKeyStatistics'] }, YF_OPTS);
     const trends = data.earningsTrend?.trend || [];
     const kstats = data.defaultKeyStatistics;
 
@@ -319,8 +320,8 @@ app.get('/api/calc-data/:ticker', async (req, res) => {
     ];
     const [annualMap, quote, estimates] = await Promise.all([
       fetchTimeSeries(t, annualTypes),
-      yf.quoteSummary(t, { modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail'] }),
-      yf.quoteSummary(t, { modules: ['earningsTrend'] }).catch(() => null),
+      yf.quoteSummary(t, { modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail'] }, YF_OPTS),
+      yf.quoteSummary(t, { modules: ['earningsTrend'] }, YF_OPTS).catch(() => null),
     ]);
 
     const years = getYears(annualMap);
