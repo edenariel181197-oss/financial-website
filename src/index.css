@@ -1,0 +1,6 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { margin: 0; background: #0f172a; font-family: 'Segoe UI', Arial, sans-serif; direction: rtl; }
+#root { width: 100%; min-height: 100vh; }
+h1, h2, h3, h4 { font-weight: 600; }
+p { margin: 0; }
+input, button { font-family: inherit; }
