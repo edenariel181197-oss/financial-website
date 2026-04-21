@@ -58,8 +58,21 @@ export default function Calculator2({ ticker }) {
   const history = calcData?.history?.slice(0, 5) || [];
   const current = calcData?.current || {};
 
-  // Latest revenue for projections
-  const latestRevenue = history[0]?.revenue ?? null;
+  // Most recent year is last in the ascending array
+  const baseRevenue = history[history.length - 1]?.revenue ?? null;
+  const baseYear = history.length > 0 ? parseInt(history[history.length - 1].year) : new Date().getFullYear();
+
+  // Live projected years — update as user types
+  const projYears = (() => {
+    const margin = parseFloat(netMargin) / 100;
+    const growth = parseFloat(revenueGrowth) / 100;
+    if (!baseRevenue || isNaN(margin) || isNaN(growth)) return [];
+    return Array.from({ length: 5 }, (_, i) => {
+      const revenue = baseRevenue * Math.pow(1 + growth, i + 1);
+      const netIncome = revenue * margin;
+      return { year: baseYear + i + 1, revenue, netMargin: margin, netIncome };
+    });
+  })();
 
   function calculate() {
     const margin = parseFloat(netMargin) / 100;
@@ -67,9 +80,9 @@ export default function Calculator2({ ticker }) {
     const shares = current.sharesOutstanding;
     const mktPrice = current.price;
 
-    if (!latestRevenue || isNaN(margin) || isNaN(growth)) return;
+    if (!baseRevenue || isNaN(margin) || isNaN(growth)) return;
 
-    const rev5 = latestRevenue * Math.pow(1 + growth, 5);
+    const rev5 = baseRevenue * Math.pow(1 + growth, 5);
     const netIncome5 = rev5 * margin;
     const currentMC = shares && mktPrice ? shares * mktPrice : null;
 
@@ -130,34 +143,41 @@ export default function Calculator2({ ticker }) {
         </div>
       </div>
 
-      {/* Historical table */}
+      {/* Historical + Projected table */}
       {history.length > 0 && (
         <div className="lux-section">
-          <h3 className="lux-section-title">היסטוריה פיננסית — 5 שנים</h3>
+          <h3 className="lux-section-title">היסטוריה פיננסית + תחזית 5 שנים</h3>
           <div className="eps-table-wrap">
             <table className="lux-table">
               <thead>
                 <tr>
                   <th>שנה</th>
                   {history.map(r => <th key={r.year}>{r.year}</th>)}
+                  {projYears.map(r => <th key={r.year} className="proj-year">{r.year}E</th>)}
                 </tr>
               </thead>
               <tbody>
                 <tr>
                   <td className="row-lbl">הכנסות</td>
                   {history.map(r => <td key={r.year}>{fmtB(r.revenue)}</td>)}
+                  {projYears.map(r => <td key={r.year} className="proj-val">{fmtB(r.revenue)}</td>)}
                 </tr>
                 <tr>
                   <td className="row-lbl">שולי רווח</td>
                   {history.map(r => <td key={r.year}>{fmtPct(r.netMargin)}</td>)}
+                  {projYears.map(r => <td key={r.year} className="proj-val">{fmtPct(r.netMargin)}</td>)}
                 </tr>
                 <tr>
                   <td className="row-lbl">רווח נקי</td>
                   {history.map(r => <td key={r.year} className={r.netIncome > 0 ? 'pos-val' : 'neg-val'}>{fmtB(r.netIncome)}</td>)}
+                  {projYears.map(r => <td key={r.year} className="proj-val pos-val">{fmtB(r.netIncome)}</td>)}
                 </tr>
               </tbody>
             </table>
           </div>
+          {projYears.length === 0 && (
+            <p className="lux-hint" style={{ marginTop: '0.5rem' }}>הכנס קצב צמיחה ושולי רווח לצפייה בתחזית</p>
+          )}
         </div>
       )}
 
