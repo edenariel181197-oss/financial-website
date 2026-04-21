@@ -70,7 +70,7 @@ export default function Calculator2({ ticker }) {
     return Array.from({ length: 5 }, (_, i) => {
       const revenue = baseRevenue * Math.pow(1 + growth, i + 1);
       const netIncome = revenue * margin;
-      return { year: baseYear + i + 1, revenue, netMargin: margin, netIncome };
+      return { year: baseYear + i, revenue, netMargin: margin, netIncome };
     });
   })();
 
