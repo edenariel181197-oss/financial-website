@@ -72,6 +72,8 @@ app.get('/api/quote/:ticker', async (req, res) => {
       sharesOutstanding: kstats?.sharesOutstanding,
     });
   } catch (e) {
+    console.error('[quote]', e.message);
+    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
     res.status(500).json({ error: e.message });
   }
 });
@@ -94,6 +96,7 @@ app.get('/api/quarterly/:ticker', async (req, res) => {
     }));
     res.json(result);
   } catch (e) {
+    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
     res.status(500).json({ error: e.message });
   }
 });
@@ -129,6 +132,7 @@ app.get('/api/income/:ticker', async (req, res) => {
     }));
     res.json(result);
   } catch (e) {
+    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
     res.status(500).json({ error: e.message });
   }
 });
@@ -176,6 +180,7 @@ app.get('/api/balance/:ticker', async (req, res) => {
     }));
     res.json(result);
   } catch (e) {
+    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
     res.status(500).json({ error: e.message });
   }
 });
@@ -211,6 +216,7 @@ app.get('/api/cashflow/:ticker', async (req, res) => {
     }));
     res.json(result);
   } catch (e) {
+    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
     res.status(500).json({ error: e.message });
   }
 });
@@ -236,6 +242,7 @@ app.get('/api/ratios/:ticker', async (req, res) => {
       cashConversionCycleTTM: null,
     });
   } catch (e) {
+    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
     res.status(500).json({ error: e.message });
   }
 });
@@ -278,6 +285,7 @@ app.get('/api/charts/:ticker', async (req, res) => {
 
     res.json({ annual: annualData, quarterly: quarterlyData });
   } catch (e) {
+    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
     res.status(500).json({ error: e.message });
   }
 });
@@ -306,6 +314,7 @@ app.get('/api/estimates/:ticker', async (req, res) => {
 
     res.json({ epsEstimates, sharesOutstanding: kstats?.sharesOutstanding });
   } catch (e) {
+    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
     res.status(500).json({ error: e.message });
   }
 });
@@ -375,6 +384,7 @@ app.get('/api/calc-data/:ticker', async (req, res) => {
       },
     });
   } catch (e) {
+    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
     res.status(500).json({ error: e.message });
   }
 });
