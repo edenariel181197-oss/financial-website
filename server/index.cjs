@@ -4,19 +4,84 @@ globalThis.fetch = fetch;
 
 const express = require('express');
 const cors = require('cors');
-const YahooFinance = require('yahoo-finance2').default;
 
-const yf = new YahooFinance({ suppressNotices: ['yahooSurvey'], validation: { logErrors: false, logOptionsErrors: false } });
-const YF_OPTS = { validateResult: false };
 const app = express();
 app.use(cors());
 app.use((req, res, next) => { console.log('REQ:', req.method, req.path); next(); });
 
-const YF_HEADERS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' };
+const YF_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
 const PERIOD1 = 1451606400; // 2016-01-01
 const PERIOD2 = 2000000000;
 
-// Fetch from Yahoo Finance timeseries API (reliable, no crumb needed)
+// ── Crumb management (for quoteSummary v10) ──────────────────────
+let _crumb = null, _cookie = null;
+
+async function ensureCrumb() {
+  if (_crumb) return;
+  try {
+    const r1 = await fetch('https://fc.yahoo.com', { headers: YF_HEADERS });
+    const sc = r1.headers.get('set-cookie') || '';
+    _cookie = sc.split(';')[0] || '';
+    const r2 = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+      headers: { ...YF_HEADERS, Cookie: _cookie }
+    });
+    const text = await r2.text();
+    if (text && text.length < 50 && !text.startsWith('{')) {
+      _crumb = text.trim();
+      console.log('Crumb acquired OK');
+    }
+  } catch (e) {
+    console.error('Crumb error:', e.message);
+  }
+}
+
+// ── Direct Yahoo Finance API helpers ─────────────────────────────
+
+async function fetchChart(ticker) {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`;
+    const r = await fetch(url, { headers: YF_HEADERS });
+    const d = await r.json();
+    const meta = d.chart?.result?.[0]?.meta || {};
+    return {
+      price: meta.regularMarketPrice ?? null,
+      name: meta.longName || meta.shortName || ticker,
+      marketCap: meta.marketCap ?? null,
+      sharesOutstanding: meta.sharesOutstanding ?? null,
+      currency: meta.currency ?? 'USD',
+    };
+  } catch (e) {
+    console.error('fetchChart error:', e.message);
+    return {};
+  }
+}
+
+async function fetchSummary(ticker, modules) {
+  try {
+    await ensureCrumb();
+    const mods = modules.join(',');
+    const crumbParam = _crumb ? `&crumb=${encodeURIComponent(_crumb)}` : '';
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=${mods}${crumbParam}`;
+    const headers = { ...YF_HEADERS };
+    if (_cookie) headers.Cookie = _cookie;
+    const r = await fetch(url, { headers });
+    const d = await r.json();
+    if (d.quoteSummary?.error) {
+      _crumb = null; // reset on error
+      return {};
+    }
+    return d.quoteSummary?.result?.[0] || {};
+  } catch (e) {
+    console.error('fetchSummary error:', e.message);
+    return {};
+  }
+}
+
+// ── Timeseries API (most reliable — no crumb needed) ─────────────
 async function fetchTimeSeries(ticker, types) {
   const url = `https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${ticker}?type=${types.join(',')}&period1=${PERIOD1}&period2=${PERIOD2}`;
   const r = await fetch(url, { headers: YF_HEADERS });
@@ -26,9 +91,7 @@ async function fetchTimeSeries(ticker, types) {
   for (const series of results) {
     const key = series.meta?.type?.[0];
     if (key) {
-      // Get all data points sorted by date descending
-      const dataKey = key;
-      const points = series[dataKey] || [];
+      const points = series[key] || [];
       map[key] = points
         .filter(p => p)
         .sort((a, b) => new Date(b.asOfDate) - new Date(a.asOfDate))
@@ -38,44 +101,50 @@ async function fetchTimeSeries(ticker, types) {
   return map;
 }
 
-// Get all years covered in the series
 function getYears(map) {
-  const allDates = Object.values(map).flatMap(series => series.map(p => p.date));
+  const allDates = Object.values(map).flatMap(s => s.map(p => p.date));
   return [...new Set(allDates)].sort((a, b) => b.localeCompare(a)).slice(0, 5);
 }
 
 function getVal(map, key, date) {
-  const series = map[key] || [];
-  const point = series.find(p => p.date === date);
-  return point?.value ?? null;
+  return (map[key] || []).find(p => p.date === date)?.value ?? null;
 }
 
-// Quote endpoint — uses yahoo-finance2 (has crumb cached from previous call)
+function latest(map, key) {
+  return (map[key] || [])[0]?.value ?? null;
+}
+
+// ════════════════════════════════════════════════════════════════
+//  ENDPOINTS
+// ════════════════════════════════════════════════════════════════
+
+// Quote — price, market cap, PE, EPS, margins
 app.get('/api/quote/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const [q, stats] = await Promise.allSettled([
-      yf.quote(t, {}, YF_OPTS),
-      yf.quoteSummary(t, { modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail'] }, YF_OPTS),
+    const [chart, tsMap, summary] = await Promise.all([
+      fetchChart(t),
+      fetchTimeSeries(t, ['annualDilutedEPS', 'annualNetIncomeRatio', 'annualPeRatio']),
+      fetchSummary(t, ['summaryDetail', 'defaultKeyStatistics', 'financialData']),
     ]);
-    const quote = q.status === 'fulfilled' ? q.value : {};
-    const summary = stats.status === 'fulfilled' ? stats.value : {};
-    const fin = summary.financialData || {};
-    const kstats = summary.defaultKeyStatistics || {};
+
     const sd = summary.summaryDetail || {};
+    const ks = summary.defaultKeyStatistics || {};
+    const fd = summary.financialData || {};
+
     res.json({
       symbol: t,
-      name: quote.longName || quote.shortName,
-      price: quote.regularMarketPrice,
-      pe: sd.trailingPE,
-      forwardPE: sd.forwardPE,
-      eps: kstats.trailingEps,
-      netMargin: fin.profitMargins,
-      marketCap: quote.marketCap,
-      sharesOutstanding: kstats.sharesOutstanding,
+      name: chart.name,
+      price: chart.price,
+      pe: sd.trailingPE ?? latest(tsMap, 'annualPeRatio'),
+      forwardPE: sd.forwardPE ?? null,
+      eps: ks.trailingEps ?? latest(tsMap, 'annualDilutedEPS'),
+      netMargin: fd.profitMargins ?? latest(tsMap, 'annualNetIncomeRatio'),
+      marketCap: chart.marketCap,
+      sharesOutstanding: ks.sharesOutstanding ?? chart.sharesOutstanding,
     });
   } catch (e) {
-    console.error('API ERROR:', e.message);
+    console.error('API ERROR /quote:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -84,21 +153,17 @@ app.get('/api/quote/:ticker', async (req, res) => {
 app.get('/api/quarterly/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const types = ['quarterlyTotalRevenue', 'quarterlyNetIncome', 'quarterlyBasicEPS'];
-    const map = await fetchTimeSeries(t, types);
-    const dates = [...new Set([
-      ...(map.quarterlyTotalRevenue || []).map(p => p.date),
-    ])].sort((a, b) => b.localeCompare(a)).slice(0, 12);
-
-    const result = dates.map(date => ({
+    const map = await fetchTimeSeries(t, ['quarterlyTotalRevenue', 'quarterlyNetIncome', 'quarterlyBasicEPS']);
+    const dates = [...new Set((map.quarterlyTotalRevenue || []).map(p => p.date))]
+      .sort((a, b) => b.localeCompare(a)).slice(0, 12);
+    res.json(dates.map(date => ({
       date,
       revenue: getVal(map, 'quarterlyTotalRevenue', date),
       netIncome: getVal(map, 'quarterlyNetIncome', date),
       eps: getVal(map, 'quarterlyBasicEPS', date),
-    }));
-    res.json(result);
+    })));
   } catch (e) {
-    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
+    console.error('API ERROR /quarterly:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -107,16 +172,15 @@ app.get('/api/quarterly/:ticker', async (req, res) => {
 app.get('/api/income/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const types = [
+    const map = await fetchTimeSeries(t, [
       'annualTotalRevenue', 'annualCostOfRevenue', 'annualGrossProfit', 'annualGrossProfitRatio',
       'annualSellingGeneralAndAdministration', 'annualResearchAndDevelopment',
       'annualOtherGandA', 'annualOperatingIncome', 'annualOperatingIncomeRatio',
       'annualNetInterestIncome', 'annualInterestExpense', 'annualIncomeTaxExpense',
       'annualNetIncome', 'annualNetIncomeCommonStockholders', 'annualNetIncomeRatio',
-    ];
-    const map = await fetchTimeSeries(t, types);
+    ]);
     const years = getYears(map);
-    const result = years.map(date => ({
+    res.json(years.map(date => ({
       date,
       revenue: getVal(map, 'annualTotalRevenue', date),
       costOfRevenue: getVal(map, 'annualCostOfRevenue', date),
@@ -131,10 +195,9 @@ app.get('/api/income/:ticker', async (req, res) => {
       incomeTaxExpense: getVal(map, 'annualIncomeTaxExpense', date),
       netIncome: getVal(map, 'annualNetIncome', date),
       netIncomeRatio: getVal(map, 'annualNetIncomeRatio', date),
-    }));
-    res.json(result);
+    })));
   } catch (e) {
-    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
+    console.error('API ERROR /income:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -143,7 +206,7 @@ app.get('/api/income/:ticker', async (req, res) => {
 app.get('/api/balance/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const types = [
+    const map = await fetchTimeSeries(t, [
       'annualCashAndCashEquivalents', 'annualShortTermInvestments', 'annualAccountsReceivable',
       'annualInventory', 'annualOtherCurrentAssets', 'annualCurrentAssets',
       'annualLongTermInvestments', 'annualNetPPE', 'annualGoodwill', 'annualOtherIntangibleAssets',
@@ -152,10 +215,9 @@ app.get('/api/balance/:ticker', async (req, res) => {
       'annualCurrentLiabilities', 'annualLongTermDebt', 'annualOtherNonCurrentLiabilities',
       'annualTotalLiabilitiesNetMinorityInterest',
       'annualCommonStock', 'annualRetainedEarnings', 'annualCommonStockEquity',
-    ];
-    const map = await fetchTimeSeries(t, types);
+    ]);
     const years = getYears(map);
-    const result = years.map(date => ({
+    res.json(years.map(date => ({
       date,
       cashAndCashEquivalents: getVal(map, 'annualCashAndCashEquivalents', date),
       shortTermInvestments: getVal(map, 'annualShortTermInvestments', date),
@@ -179,10 +241,9 @@ app.get('/api/balance/:ticker', async (req, res) => {
       commonStock: getVal(map, 'annualCommonStock', date),
       retainedEarnings: getVal(map, 'annualRetainedEarnings', date),
       totalStockholdersEquity: getVal(map, 'annualCommonStockEquity', date),
-    }));
-    res.json(result);
+    })));
   } catch (e) {
-    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
+    console.error('API ERROR /balance:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -191,16 +252,15 @@ app.get('/api/balance/:ticker', async (req, res) => {
 app.get('/api/cashflow/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const types = [
+    const map = await fetchTimeSeries(t, [
       'annualNetIncome', 'annualDepreciationAmortizationDepletion', 'annualChangeInWorkingCapital',
       'annualOperatingCashFlow', 'annualCapitalExpenditure', 'annualPurchaseOfBusiness',
       'annualInvestingCashFlow', 'annualLongTermDebtIssuance', 'annualRepurchaseOfCapitalStock',
       'annualCashDividendsPaid', 'annualFinancingCashFlow', 'annualFreeCashFlow',
       'annualChangesInCash',
-    ];
-    const map = await fetchTimeSeries(t, types);
+    ]);
     const years = getYears(map);
-    const result = years.map(date => ({
+    res.json(years.map(date => ({
       date,
       netIncome: getVal(map, 'annualNetIncome', date),
       depreciationAndAmortization: getVal(map, 'annualDepreciationAmortizationDepletion', date),
@@ -215,57 +275,50 @@ app.get('/api/cashflow/:ticker', async (req, res) => {
       netCashUsedProvidedByFinancingActivities: getVal(map, 'annualFinancingCashFlow', date),
       netChangeInCash: getVal(map, 'annualChangesInCash', date),
       freeCashFlow: getVal(map, 'annualFreeCashFlow', date),
-    }));
-    res.json(result);
+    })));
   } catch (e) {
-    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
+    console.error('API ERROR /cashflow:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-// Ratios
+// Ratios — from timeseries where possible, quoteSummary as bonus
 app.get('/api/ratios/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const data = await yf.quoteSummary(t, { modules: ['financialData'] }, YF_OPTS);
-    const fin = data.financialData;
+    const [map, summary] = await Promise.all([
+      fetchTimeSeries(t, ['annualGrossProfitRatio', 'annualOperatingIncomeRatio', 'annualNetIncomeRatio']),
+      fetchSummary(t, ['financialData']),
+    ]);
+    const fd = summary.financialData || {};
     res.json({
-      currentRatioTTM: fin?.currentRatio,
-      quickRatioTTM: fin?.quickRatio,
-      grossProfitMarginTTM: fin?.grossMargins,
-      operatingProfitMarginTTM: fin?.operatingMargins,
-      netProfitMarginTTM: fin?.profitMargins,
-      returnOnEquityTTM: fin?.returnOnEquity,
-      returnOnAssetsTTM: fin?.returnOnAssets,
-      longTermDebtToCapitalizationTTM: fin?.debtToEquity ? fin.debtToEquity / 100 : null,
+      currentRatioTTM: fd.currentRatio ?? null,
+      quickRatioTTM: fd.quickRatio ?? null,
+      grossProfitMarginTTM: fd.grossMargins ?? latest(map, 'annualGrossProfitRatio'),
+      operatingProfitMarginTTM: fd.operatingMargins ?? latest(map, 'annualOperatingIncomeRatio'),
+      netProfitMarginTTM: fd.profitMargins ?? latest(map, 'annualNetIncomeRatio'),
+      returnOnEquityTTM: fd.returnOnEquity ?? null,
+      returnOnAssetsTTM: fd.returnOnAssets ?? null,
+      longTermDebtToCapitalizationTTM: fd.debtToEquity ? fd.debtToEquity / 100 : null,
       daysOfSalesOutstandingTTM: null,
       daysPayablesOutstandingTTM: null,
       daysOfInventoryOutstandingTTM: null,
       cashConversionCycleTTM: null,
     });
   } catch (e) {
-    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
+    console.error('API ERROR /ratios:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-// P/E history (annual) + quarterly income for charts
+// Charts
 app.get('/api/charts/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const annualTypes = [
-      'annualTotalRevenue', 'annualNetIncome', 'annualPeRatio',
-      'annualTotalAssets', 'annualTotalLiabilitiesNetMinorityInterest',
-      'annualChangesInCash',
-    ];
-    const quarterlyTypes = [
-      'quarterlyTotalRevenue', 'quarterlyNetIncome',
-    ];
     const [annualMap, quarterlyMap] = await Promise.all([
-      fetchTimeSeries(t, annualTypes),
-      fetchTimeSeries(t, quarterlyTypes),
+      fetchTimeSeries(t, ['annualTotalRevenue', 'annualNetIncome', 'annualPeRatio', 'annualTotalAssets', 'annualTotalLiabilitiesNetMinorityInterest', 'annualChangesInCash']),
+      fetchTimeSeries(t, ['quarterlyTotalRevenue', 'quarterlyNetIncome']),
     ]);
-
     const annualYears = getYears(annualMap);
     const annualData = annualYears.map(date => ({
       date: date.slice(0, 4),
@@ -287,57 +340,47 @@ app.get('/api/charts/:ticker', async (req, res) => {
 
     res.json({ annual: annualData, quarterly: quarterlyData });
   } catch (e) {
-    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
+    console.error('API ERROR /charts:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-// Future EPS estimates
+// EPS Estimates
 app.get('/api/estimates/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const data = await yf.quoteSummary(t, { modules: ['earningsTrend', 'defaultKeyStatistics'] }, YF_OPTS);
-    const trends = data.earningsTrend?.trend || [];
-    const kstats = data.defaultKeyStatistics;
-
+    const summary = await fetchSummary(t, ['earningsTrend', 'defaultKeyStatistics']);
+    const trends = summary.earningsTrend?.trend || [];
+    const kstats = summary.defaultKeyStatistics || {};
     const periodLabel = { '0q': 'רבעון נוכחי', '0y': 'שנה נוכחית', '+1y': 'שנה הבאה', '+5y': 'צמיחה שנתית 5 שנים' };
     const epsEstimates = trends
       .filter(tr => ['0q', '0y', '+1y', '+5y'].includes(tr.period))
       .map(tr => ({
         period: periodLabel[tr.period] || tr.period,
-        epsLow: tr.earningsEstimate?.low,
-        epsMid: tr.earningsEstimate?.avg,
-        epsHigh: tr.earningsEstimate?.high,
-        revenueAvg: tr.revenueEstimate?.avg,
-        growthRate: tr.earningsEstimate?.growth ?? tr.growth,
+        epsLow: tr.earningsEstimate?.low ?? null,
+        epsMid: tr.earningsEstimate?.avg ?? null,
+        epsHigh: tr.earningsEstimate?.high ?? null,
+        revenueAvg: tr.revenueEstimate?.avg ?? null,
+        growthRate: tr.earningsEstimate?.growth ?? tr.growth ?? null,
         isPct: tr.period === '+5y',
-        yearAgoEps: tr.earningsEstimate?.yearAgoEps,
+        yearAgoEps: tr.earningsEstimate?.yearAgoEps ?? null,
       }));
-
-    res.json({ epsEstimates, sharesOutstanding: kstats?.sharesOutstanding });
+    res.json({ epsEstimates, sharesOutstanding: kstats.sharesOutstanding ?? null });
   } catch (e) {
-    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
+    console.error('API ERROR /estimates:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-// Calculator data — EPS history + income history for both calculators
+// Calculator data
 app.get('/api/calc-data/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const annualTypes = [
-      'annualDilutedEPS', 'annualTotalRevenue', 'annualNetIncome',
-      'annualNetIncomeRatio', 'annualPeRatio',
-    ];
-    const [annualMap, quoteResult, estimatesResult] = await Promise.allSettled([
-      fetchTimeSeries(t, annualTypes),
-      yf.quoteSummary(t, { modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail'] }, YF_OPTS),
-      yf.quoteSummary(t, { modules: ['earningsTrend'] }, YF_OPTS),
+    const [map, chart, summary] = await Promise.all([
+      fetchTimeSeries(t, ['annualDilutedEPS', 'annualTotalRevenue', 'annualNetIncome', 'annualNetIncomeRatio', 'annualPeRatio']),
+      fetchChart(t),
+      fetchSummary(t, ['financialData', 'defaultKeyStatistics', 'summaryDetail', 'earningsTrend']),
     ]);
-
-    const map = annualMap.status === 'fulfilled' ? annualMap.value : {};
-    const quoteData = quoteResult.status === 'fulfilled' ? quoteResult.value : {};
-    const estimates = estimatesResult.status === 'fulfilled' ? estimatesResult.value : null;
 
     const years = getYears(map);
     const history = years.map(date => {
@@ -348,53 +391,45 @@ app.get('/api/calc-data/:ticker', async (req, res) => {
       return {
         year: date.slice(0, 4),
         eps: getVal(map, 'annualDilutedEPS', date),
-        revenue,
-        netIncome,
-        netMargin,
+        revenue, netIncome, netMargin,
         pe: getVal(map, 'annualPeRatio', date),
       };
     }).reverse();
 
-    const fin = quoteData.financialData || {};
-    const kstats = quoteData.defaultKeyStatistics || {};
-    const summary = quoteData.summaryDetail || {};
+    const fd = summary.financialData || {};
+    const ks = summary.defaultKeyStatistics || {};
+    const sd = summary.summaryDetail || {};
+    const trend5y = summary.earningsTrend?.trend?.find(tr => tr.period === '+5y');
 
-    // Forward EPS growth estimate from analyst
-    const trend5y = estimates?.earningsTrend?.trend?.find(t => t.period === '+5y');
-    const fwdGrowth = trend5y?.growth ?? null;
-
-    // Fallback: compute from history if Yahoo live values are missing
-    const latestNetMargin = fin?.profitMargins
-      ?? (history[0]?.netMargin != null ? history[0].netMargin : null);
-
+    const latestNetMargin = fd.profitMargins ?? latest(map, 'annualNetIncomeRatio') ?? history[0]?.netMargin ?? null;
     const calcRevenueGrowth = (history[0]?.revenue && history[1]?.revenue && history[1].revenue !== 0)
-      ? (history[0].revenue - history[1].revenue) / Math.abs(history[1].revenue)
-      : null;
-    const latestRevenueGrowth = fin?.revenueGrowth ?? calcRevenueGrowth;
+      ? (history[0].revenue - history[1].revenue) / Math.abs(history[1].revenue) : null;
+
+    const sharesOutstanding = ks.sharesOutstanding ?? chart.sharesOutstanding ?? null;
+    const price = fd.currentPrice ?? chart.price ?? null;
+    const marketCap = chart.marketCap ?? (sharesOutstanding && price ? sharesOutstanding * price : null);
 
     res.json({
       history,
       current: {
-        price: fin?.currentPrice ?? kstats?.currentPrice,
-        pe: summary?.trailingPE,
-        forwardPE: summary?.forwardPE,
-        eps: kstats?.trailingEps,
+        price,
+        pe: sd.trailingPE ?? latest(map, 'annualPeRatio'),
+        forwardPE: sd.forwardPE ?? null,
+        eps: ks.trailingEps ?? latest(map, 'annualDilutedEPS'),
         netMargin: latestNetMargin,
-        marketCap: fin?.marketCap ?? kstats?.marketCap
-          ?? (kstats?.sharesOutstanding && fin?.currentPrice
-              ? kstats.sharesOutstanding * fin.currentPrice : null),
-        sharesOutstanding: kstats?.sharesOutstanding,
-        revenueGrowth: latestRevenueGrowth,
-        analystGrowth5y: fwdGrowth,
+        marketCap,
+        sharesOutstanding,
+        revenueGrowth: fd.revenueGrowth ?? calcRevenueGrowth,
+        analystGrowth5y: trend5y?.growth ?? null,
       },
     });
   } catch (e) {
-    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
+    console.error('API ERROR /calc-data:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-// Serve built frontend (production)
+// Serve built frontend
 const path = require('path');
 const distPath = path.join(__dirname, '../dist');
 app.use(express.static(distPath));
