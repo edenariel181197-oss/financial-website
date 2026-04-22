@@ -61,6 +61,17 @@ async function fetchChart(ticker) {
 }
 
 async function fetchSummary(ticker, modules) {
+  // Try v6 first (no crumb needed), fallback to v10 with crumb
+  try {
+    const mods = modules.join(',');
+    const url6 = `https://query2.finance.yahoo.com/v6/finance/quoteSummary/${ticker}?modules=${mods}`;
+    const r = await fetch(url6, { headers: YF_HEADERS });
+    const d = await r.json();
+    if (d.quoteSummary?.result?.[0]) return d.quoteSummary.result[0];
+  } catch (e) {
+    console.error('fetchSummary v6 error:', e.message);
+  }
+  // Fallback: v10 with crumb
   try {
     await ensureCrumb();
     const mods = modules.join(',');
@@ -70,15 +81,11 @@ async function fetchSummary(ticker, modules) {
     if (_cookie) headers.Cookie = _cookie;
     const r = await fetch(url, { headers });
     const d = await r.json();
-    if (d.quoteSummary?.error) {
-      _crumb = null; // reset on error
-      return {};
-    }
-    return d.quoteSummary?.result?.[0] || {};
+    if (d.quoteSummary?.result?.[0]) return d.quoteSummary.result[0];
   } catch (e) {
-    console.error('fetchSummary error:', e.message);
-    return {};
+    console.error('fetchSummary v10 error:', e.message);
   }
+  return {};
 }
 
 // ── Timeseries API (most reliable — no crumb needed) ─────────────
