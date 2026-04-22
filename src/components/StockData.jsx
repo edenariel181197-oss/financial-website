@@ -48,7 +48,7 @@ export default function StockData({ ticker }) {
           { label: 'מחיר', val: `$${fmtRaw(quote.price)}` },
           { label: 'שווי שוק', val: (() => { const mc = quote.marketCap ?? (quote.sharesOutstanding && quote.price ? quote.sharesOutstanding * quote.price : null); if (!mc) return '—'; if (mc >= 1e12) return `$${(mc/1e12).toFixed(2)}T`; if (mc >= 1e9) return `$${(mc/1e9).toFixed(1)}B`; return `$${(mc/1e6).toFixed(0)}M`; })() },
           { label: 'P/E', val: fmtRaw(quote.pe) },
-          { label: 'P/E Forward', val: fmtRaw(quote.forwardPE) },
+
           { label: 'EPS (TTM)', val: `$${fmtRaw(quote.eps)}` },
           { label: 'שולי רווח נקי', val: fmtPct(quote.netMargin) },
         ].map(({ label, val }) => (
