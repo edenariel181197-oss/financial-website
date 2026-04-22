@@ -196,9 +196,11 @@ app.get('/api/income/:ticker', async (req, res) => {
     const t = req.params.ticker.toUpperCase();
     const map = await fetchTimeSeries(t, [
       'annualTotalRevenue', 'annualCostOfRevenue', 'annualGrossProfit', 'annualGrossProfitRatio',
-      'annualSellingGeneralAndAdministration', 'annualResearchAndDevelopment',
-      'annualOtherGandA', 'annualOperatingIncome', 'annualOperatingIncomeRatio',
-      'annualNetInterestIncome', 'annualInterestExpense', 'annualIncomeTaxExpense',
+      'annualSellingGeneralAndAdministration', 'annualGeneralAndAdministrativeExpense',
+      'annualResearchAndDevelopment', 'annualOtherGandA',
+      'annualOperatingIncome', 'annualOperatingIncomeRatio',
+      'annualNetInterestIncome', 'annualInterestExpense',
+      'annualTaxProvision', 'annualIncomeTaxExpense',
       'annualNetIncome', 'annualNetIncomeCommonStockholders', 'annualNetIncomeRatio',
     ]);
     const years = getYears(map);
@@ -209,12 +211,14 @@ app.get('/api/income/:ticker', async (req, res) => {
       grossProfit: getVal(map, 'annualGrossProfit', date),
       grossProfitRatio: getVal(map, 'annualGrossProfitRatio', date),
       sellingAndMarketingExpenses: getVal(map, 'annualSellingGeneralAndAdministration', date),
-      generalAndAdministrativeExpenses: getVal(map, 'annualOtherGandA', date),
+      generalAndAdministrativeExpenses: getVal(map, 'annualGeneralAndAdministrativeExpense', date)
+        ?? getVal(map, 'annualOtherGandA', date),
       otherExpenses: getVal(map, 'annualResearchAndDevelopment', date),
       operatingIncome: getVal(map, 'annualOperatingIncome', date),
       operatingIncomeRatio: getVal(map, 'annualOperatingIncomeRatio', date),
       interestExpense: getVal(map, 'annualInterestExpense', date),
-      incomeTaxExpense: getVal(map, 'annualIncomeTaxExpense', date),
+      incomeTaxExpense: getVal(map, 'annualTaxProvision', date)
+        ?? getVal(map, 'annualIncomeTaxExpense', date),
       netIncome: getVal(map, 'annualNetIncome', date),
       netIncomeRatio: getVal(map, 'annualNetIncomeRatio', date),
     })));
