@@ -54,27 +54,28 @@ function getVal(map, key, date) {
 app.get('/api/quote/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const [q, stats] = await Promise.all([
+    const [q, stats] = await Promise.allSettled([
       yf.quote(t, {}, YF_OPTS),
       yf.quoteSummary(t, { modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail'] }, YF_OPTS),
     ]);
-    const fin = stats.financialData;
-    const kstats = stats.defaultKeyStatistics;
-    const summary = stats.summaryDetail;
+    const quote = q.status === 'fulfilled' ? q.value : {};
+    const summary = stats.status === 'fulfilled' ? stats.value : {};
+    const fin = summary.financialData || {};
+    const kstats = summary.defaultKeyStatistics || {};
+    const sd = summary.summaryDetail || {};
     res.json({
       symbol: t,
-      name: q.longName || q.shortName,
-      price: q.regularMarketPrice,
-      pe: summary?.trailingPE,
-      forwardPE: summary?.forwardPE,
-      eps: kstats?.trailingEps,
-      netMargin: fin?.profitMargins,
-      marketCap: q.marketCap,
-      sharesOutstanding: kstats?.sharesOutstanding,
+      name: quote.longName || quote.shortName,
+      price: quote.regularMarketPrice,
+      pe: sd.trailingPE,
+      forwardPE: sd.forwardPE,
+      eps: kstats.trailingEps,
+      netMargin: fin.profitMargins,
+      marketCap: quote.marketCap,
+      sharesOutstanding: kstats.sharesOutstanding,
     });
   } catch (e) {
-    console.error('[quote]', e.message);
-    console.error('API ERROR:', e.message, e.stack?.split('\n')[1]);
+    console.error('API ERROR:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -328,32 +329,35 @@ app.get('/api/calc-data/:ticker', async (req, res) => {
       'annualDilutedEPS', 'annualTotalRevenue', 'annualNetIncome',
       'annualNetIncomeRatio', 'annualPeRatio',
     ];
-    const [annualMap, quote, estimates] = await Promise.all([
+    const [annualMap, quoteResult, estimatesResult] = await Promise.allSettled([
       fetchTimeSeries(t, annualTypes),
       yf.quoteSummary(t, { modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail'] }, YF_OPTS),
-      yf.quoteSummary(t, { modules: ['earningsTrend'] }, YF_OPTS).catch(() => null),
+      yf.quoteSummary(t, { modules: ['earningsTrend'] }, YF_OPTS),
     ]);
 
-    const years = getYears(annualMap);
+    const map = annualMap.status === 'fulfilled' ? annualMap.value : {};
+    const quoteData = quoteResult.status === 'fulfilled' ? quoteResult.value : {};
+    const estimates = estimatesResult.status === 'fulfilled' ? estimatesResult.value : null;
+
+    const years = getYears(map);
     const history = years.map(date => {
-      const revenue = getVal(annualMap, 'annualTotalRevenue', date);
-      const netIncome = getVal(annualMap, 'annualNetIncome', date);
-      const netMarginRaw = getVal(annualMap, 'annualNetIncomeRatio', date);
-      // Calculate margin directly if the ratio field is missing
+      const revenue = getVal(map, 'annualTotalRevenue', date);
+      const netIncome = getVal(map, 'annualNetIncome', date);
+      const netMarginRaw = getVal(map, 'annualNetIncomeRatio', date);
       const netMargin = netMarginRaw ?? (revenue && netIncome != null ? netIncome / revenue : null);
       return {
         year: date.slice(0, 4),
-        eps: getVal(annualMap, 'annualDilutedEPS', date),
+        eps: getVal(map, 'annualDilutedEPS', date),
         revenue,
         netIncome,
         netMargin,
-        pe: getVal(annualMap, 'annualPeRatio', date),
+        pe: getVal(map, 'annualPeRatio', date),
       };
     }).reverse();
 
-    const fin = quote.financialData;
-    const kstats = quote.defaultKeyStatistics;
-    const summary = quote.summaryDetail;
+    const fin = quoteData.financialData || {};
+    const kstats = quoteData.defaultKeyStatistics || {};
+    const summary = quoteData.summaryDetail || {};
 
     // Forward EPS growth estimate from analyst
     const trend5y = estimates?.earningsTrend?.trend?.find(t => t.period === '+5y');
