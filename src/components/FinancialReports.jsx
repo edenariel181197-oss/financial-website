@@ -94,9 +94,8 @@ function IncomeTab({ data, years }) {
           {row('רווח גולמי', 'grossProfit')}
           {marginRow('שיעור רווח גולמי (רווח גולמי ÷ הכנסות)', 'grossProfit')}
           <tr className="section-divider"><td colSpan={6}></td></tr>
-          {row('מכירה ושיווק', 'sellingAndMarketingExpenses')}
-          {row('הנהלה וכלליות (G&A)', 'generalAndAdministrativeExpenses')}
-          {row('הוצאות אחרות', 'otherExpenses')}
+          {row('מכירה, הנהלה וכלליות (SG&A)', 'sellingAndMarketingExpenses')}
+          {row('מחקר ופיתוח (R&D)', 'otherExpenses')}
           <tr className="section-divider"><td colSpan={6}></td></tr>
           {row('רווח תפעולי (EBIT)', 'operatingIncome')}
           {marginRow('שיעור רווח תפעולי (רווח תפעולי ÷ הכנסות)', 'operatingIncome')}
