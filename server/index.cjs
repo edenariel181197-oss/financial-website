@@ -455,8 +455,10 @@ app.get('/api/calc-data/:ticker', async (req, res) => {
       ?? (tsRevenue && tsNetIncome ? tsNetIncome / tsRevenue : null)
       ?? history[0]?.netMargin ?? null;
 
-    const calcRevenueGrowth = (history[0]?.revenue && history[1]?.revenue && history[1].revenue !== 0)
-      ? (history[0].revenue - history[1].revenue) / Math.abs(history[1].revenue) : null;
+    // history is oldest→newest after .reverse(), so use last two entries
+    const lastIdx = history.length - 1;
+    const calcRevenueGrowth = (lastIdx >= 1 && history[lastIdx]?.revenue && history[lastIdx - 1]?.revenue && history[lastIdx - 1].revenue !== 0)
+      ? (history[lastIdx].revenue - history[lastIdx - 1].revenue) / Math.abs(history[lastIdx - 1].revenue) : null;
 
     res.json({
       history,
