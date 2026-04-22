@@ -308,24 +308,41 @@ app.get('/api/cashflow/:ticker', async (req, res) => {
   }
 });
 
-// Ratios — from timeseries where possible, quoteSummary as bonus
+// Ratios — computed from timeseries data
 app.get('/api/ratios/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
     const [map, summary] = await Promise.all([
-      fetchTimeSeries(t, ['annualGrossProfitRatio', 'annualOperatingIncomeRatio', 'annualNetIncomeRatio']),
+      fetchTimeSeries(t, [
+        'annualTotalRevenue', 'annualGrossProfit', 'annualOperatingIncome', 'annualNetIncome',
+        'annualCommonStockEquity', 'annualTotalAssets', 'annualLongTermDebt',
+        'annualCurrentAssets', 'annualCurrentLiabilities',
+      ]),
       fetchSummary(t, ['financialData']),
     ]);
     const fd = summary.financialData || {};
+
+    const rev  = latest(map, 'annualTotalRevenue');
+    const gp   = latest(map, 'annualGrossProfit');
+    const op   = latest(map, 'annualOperatingIncome');
+    const ni   = latest(map, 'annualNetIncome');
+    const eq   = latest(map, 'annualCommonStockEquity');
+    const ta   = latest(map, 'annualTotalAssets');
+    const ltd  = latest(map, 'annualLongTermDebt');
+    const ca   = latest(map, 'annualCurrentAssets');
+    const cl   = latest(map, 'annualCurrentLiabilities');
+
     res.json({
-      currentRatioTTM: fd.currentRatio ?? null,
+      currentRatioTTM: fd.currentRatio ?? (ca && cl ? ca / cl : null),
       quickRatioTTM: fd.quickRatio ?? null,
-      grossProfitMarginTTM: fd.grossMargins ?? latest(map, 'annualGrossProfitRatio'),
-      operatingProfitMarginTTM: fd.operatingMargins ?? latest(map, 'annualOperatingIncomeRatio'),
-      netProfitMarginTTM: fd.profitMargins ?? latest(map, 'annualNetIncomeRatio'),
-      returnOnEquityTTM: fd.returnOnEquity ?? null,
-      returnOnAssetsTTM: fd.returnOnAssets ?? null,
-      longTermDebtToCapitalizationTTM: fd.debtToEquity ? fd.debtToEquity / 100 : null,
+      grossProfitMarginTTM: fd.grossMargins ?? (gp && rev ? gp / rev : null),
+      operatingProfitMarginTTM: fd.operatingMargins ?? (op && rev ? op / rev : null),
+      netProfitMarginTTM: fd.profitMargins ?? (ni && rev ? ni / rev : null),
+      returnOnEquityTTM: fd.returnOnEquity ?? (ni && eq ? ni / eq : null),
+      returnOnAssetsTTM: fd.returnOnAssets ?? (ni && ta ? ni / ta : null),
+      longTermDebtToCapitalizationTTM: fd.debtToEquity
+        ? fd.debtToEquity / 100
+        : (ltd && eq ? ltd / (ltd + eq) : null),
       daysOfSalesOutstandingTTM: null,
       daysPayablesOutstandingTTM: null,
       daysOfInventoryOutstandingTTM: null,
