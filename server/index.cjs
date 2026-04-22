@@ -158,11 +158,12 @@ app.get('/api/quote/:ticker', async (req, res) => {
       name: chart.name,
       price,
       pe: sd.trailingPE ?? latest(tsMap, 'annualPeRatio'),
-      forwardPE: sd.forwardPE ?? null,
+      forwardPE: sd.forwardPE ?? (ks.forwardEps && chart.price ? chart.price / ks.forwardEps : null),
       eps: ks.trailingEps ?? latest(tsMap, 'annualDilutedEPS'),
       netMargin,
       marketCap,
       sharesOutstanding,
+      forwardPE: sd.forwardPE ?? (ks.forwardEps && price ? price / ks.forwardEps : null),
     });
   } catch (e) {
     console.error('API ERROR /quote:', e.message);
