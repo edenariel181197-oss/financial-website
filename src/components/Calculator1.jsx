@@ -6,6 +6,16 @@ function fmtNum(n, d = 2) {
   return Number(n).toFixed(d);
 }
 
+function Tooltip({ text }) {
+  const [vis, setVis] = useState(false);
+  return (
+    <span className="tooltip-wrap" onMouseEnter={() => setVis(true)} onMouseLeave={() => setVis(false)}>
+      <span className="tooltip-icon">?</span>
+      {vis && <span className="tooltip-box">{text}</span>}
+    </span>
+  );
+}
+
 export default function Calculator1({ ticker }) {
   const [calcData, setCalcData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -29,9 +39,7 @@ export default function Calculator1({ ticker }) {
   const history = calcData?.history?.slice(0, 5) || [];
   const current = calcData?.current || {};
 
-  // Current year EPS (TTM)
   const epsNow = current.eps;
-  // Analyst 5y growth estimate as default
   const analystGrowth = current.analystGrowth5y != null
     ? (current.analystGrowth5y * 100).toFixed(1)
     : '';
@@ -74,73 +82,54 @@ export default function Calculator1({ ticker }) {
   return (
     <div className="calc-luxury">
       <div className="calc-lux-header">
-        <h2>מחשבון הערכת שווי — EPS</h2>
+        <h2>♦ מחשבון הערכת שווי — EPS</h2>
         {!ticker && <p className="lux-hint">הכנס טיקר חברה בראש הדף כדי לטעון נתונים אוטומטית</p>}
         {loading && <p className="lux-hint">טוען נתונים עבור {ticker}...</p>}
       </div>
 
-      {/* EPS Table — Historical + Projected */}
-      <div className="lux-section">
-        <h3 className="lux-section-title">רווח למניה (EPS)</h3>
-        <div className="eps-table-wrap">
-          <table className="lux-table eps-table">
-            <thead>
-              <tr>
-                <th>שנה</th>
-                {history.map(r => <th key={r.year}>{r.year}</th>)}
-                {epsProjYears.map(r => <th key={r.year} className="proj-year">{r.year}E</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="row-lbl">EPS</td>
-                {history.map(r => (
-                  <td key={r.year} className={r.eps != null && r.eps > 0 ? 'pos-val' : 'neg-val'}>
-                    {r.eps != null ? `$${fmtNum(r.eps)}` : '—'}
-                  </td>
-                ))}
-                {epsProjYears.map(r => (
-                  <td key={r.year} className="proj-val">${fmtNum(r.eps)}</td>
-                ))}
-              </tr>
-              <tr>
-                <td className="row-lbl">P/E</td>
-                {history.map(r => <td key={r.year}>{r.pe != null ? fmtNum(r.pe, 1) : '—'}</td>)}
-                {epsProjYears.map(r => <td key={r.year} className="proj-val">—</td>)}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
       {/* Inputs */}
       <div className="lux-section">
-        <h3 className="lux-section-title">הנחות חישוב</h3>
+        <h3 className="lux-section-title">♦ הנחות חישוב</h3>
         <div className="lux-inputs-grid">
           <div className="lux-input-item">
-            <label>EPS נוכחי (TTM)</label>
+            <label>
+              EPS נוכחי (TTM){' '}
+              <Tooltip text="רווח למניה של 12 החודשים האחרונים (Trailing Twelve Months). מחושב מהדוחות של החברה." />
+            </label>
             <div className="lux-static-val">{epsNow != null ? `$${fmtNum(epsNow)}` : '—'}</div>
           </div>
           <div className="lux-input-item">
-            <label>קצב צמיחת רווחים % (5 שנים)</label>
+            <label>
+              קצב צמיחת רווחים % (5 שנים){' '}
+              <Tooltip text="הקצב השנתי הצפוי בצמיחת ה-EPS. ניתן להסתמך על תחזיות אנליסטים או על ממוצע הצמיחה ההיסטורית." />
+            </label>
             <input type="number" value={growthRate} onChange={e => setGrowthRate(e.target.value)} placeholder="לדוג׳ 15" className="lux-input" />
             {current.analystGrowth5y != null && (
               <span className="lux-hint-inline">אנליסטים: {(current.analystGrowth5y * 100).toFixed(1)}%</span>
             )}
           </div>
           <div className="lux-input-item">
-            <label>מכפיל רווח שנה חמישית (P/E)</label>
+            <label>
+              מכפיל רווח שנה חמישית (P/E){' '}
+              <Tooltip text="מכפיל הרווח שאתה מניח שהחברה תיסחר בו בשנה ה-5. לרוב מתבסס על הממוצע ההיסטורי של החברה." />
+            </label>
             <input type="number" value={pe5} onChange={e => setPe5(e.target.value)} placeholder="לדוג׳ 20" className="lux-input" />
             {current.pe != null && (
               <span className="lux-hint-inline">P/E נוכחי: {fmtNum(current.pe, 1)}</span>
             )}
           </div>
           <div className="lux-input-item">
-            <label>שיעור היוון % (תשואה רצויה)</label>
+            <label>
+              שיעור היוון % (תשואה רצויה){' '}
+              <Tooltip text="תשואה שנתית מינימלית שאתה מצפה לקבל מהשקעה. משמש להוון המחיר העתידי להיום." />
+            </label>
             <input type="number" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="לדוג׳ 15" className="lux-input" />
           </div>
           <div className="lux-input-item">
-            <label>מרווח ביטחון %</label>
+            <label>
+              מרווח ביטחון %{' '}
+              <Tooltip text="הנחה על המחיר ההוגן לצורך הגנה מפני אי-ודאות. לדוגמה: 30% פירושו קנייה ב-70% מהשווי ההוגן." />
+            </label>
             <input type="number" value={mos} onChange={e => setMos(e.target.value)} placeholder="30" className="lux-input" />
           </div>
           <div className="lux-input-item">
@@ -193,6 +182,42 @@ export default function Calculator1({ ticker }) {
           </div>
         </div>
       )}
+
+      {/* EPS Table — Historical + Projected */}
+      <div className="lux-section" style={{ marginTop: '1.5rem' }}>
+        <h3 className="lux-section-title">♦ רווח למניה (EPS) — היסטוריה ותחזית</h3>
+        <div className="eps-table-wrap">
+          <table className="lux-table eps-table">
+            <thead>
+              <tr>
+                <th>שנה</th>
+                {history.map(r => <th key={r.year}>{r.year}</th>)}
+                {epsProjYears.map(r => <th key={r.year} className="proj-year">{r.year}E</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="row-lbl">EPS</td>
+                {history.map(r => (
+                  <td key={r.year} className={r.eps != null && r.eps > 0 ? 'pos-val' : 'neg-val'}>
+                    {r.eps != null ? `$${fmtNum(r.eps)}` : '—'}
+                  </td>
+                ))}
+                {epsProjYears.map(r => (
+                  <td key={r.year} className="proj-val">${fmtNum(r.eps)}</td>
+                ))}
+              </tr>
+              <tr>
+                <td className="row-lbl">P/E</td>
+                {history.map(r => <td key={r.year}>{r.pe != null ? fmtNum(r.pe, 1) : '—'}</td>)}
+                {epsProjYears.map(r => <td key={r.year} className="proj-val">—</td>)}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p className="calc-disclaimer">כלי זה מיועד למטרות לימוד בלבד ואינו מהווה ייעוץ השקעות. אין להסתמך על תוצאות המחשבון לצורך קבלת החלטות השקעה.</p>
     </div>
   );
 }

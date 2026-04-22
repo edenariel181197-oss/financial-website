@@ -7,7 +7,7 @@ const cors = require('cors');
 
 const app = express();
 app.use(cors());
-app.use((req, res, next) => { console.log('REQ:', req.method, req.path); next(); });
+app.use((req, _res, next) => { console.log('REQ:', req.method, req.path); next(); });
 
 const YF_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -17,7 +17,7 @@ const YF_HEADERS = {
 const PERIOD1 = 1451606400; // 2016-01-01
 const PERIOD2 = 2000000000;
 
-// ── Crumb management (for quoteSummary v10) ──────────────────────
+// ── Crumb management ──────────────────────────────────────────────
 let _crumb = null, _cookie = null;
 
 async function ensureCrumb() {
@@ -47,12 +47,18 @@ async function fetchChart(ticker) {
     const r = await fetch(url, { headers: YF_HEADERS });
     const d = await r.json();
     const meta = d.chart?.result?.[0]?.meta || {};
+    const price = meta.regularMarketPrice ?? null;
+    const prevClose = meta.chartPreviousClose ?? null;
+    const change = (price != null && prevClose != null) ? price - prevClose : null;
+    const changePercent = (change != null && prevClose) ? (change / prevClose) * 100 : null;
     return {
-      price: meta.regularMarketPrice ?? null,
+      price,
       name: meta.longName || meta.shortName || ticker,
       marketCap: meta.marketCap ?? null,
       sharesOutstanding: meta.sharesOutstanding ?? null,
       currency: meta.currency ?? 'USD',
+      change,
+      changePercent,
     };
   } catch (e) {
     console.error('fetchChart error:', e.message);
@@ -61,7 +67,6 @@ async function fetchChart(ticker) {
 }
 
 async function fetchSummary(ticker, modules) {
-  // Try v6 first (no crumb needed), fallback to v10 with crumb
   try {
     const mods = modules.join(',');
     const url6 = `https://query2.finance.yahoo.com/v6/finance/quoteSummary/${ticker}?modules=${mods}`;
@@ -71,7 +76,6 @@ async function fetchSummary(ticker, modules) {
   } catch (e) {
     console.error('fetchSummary v6 error:', e.message);
   }
-  // Fallback: v10 with crumb
   try {
     await ensureCrumb();
     const mods = modules.join(',');
@@ -125,7 +129,7 @@ function latest(map, key) {
 //  ENDPOINTS
 // ════════════════════════════════════════════════════════════════
 
-// Quote — price, market cap, PE, EPS, margins
+// Quote
 app.get('/api/quote/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
@@ -139,17 +143,13 @@ app.get('/api/quote/:ticker', async (req, res) => {
     const ks = summary.defaultKeyStatistics || {};
     const fd = summary.financialData || {};
 
-    // netMargin: prefer live, fallback to ratio field, fallback to compute from timeseries
     const tsRevenue = latest(tsMap, 'annualTotalRevenue');
     const tsNetIncome = latest(tsMap, 'annualNetIncome');
     const netMargin = fd.profitMargins
       ?? latest(tsMap, 'annualNetIncomeRatio')
       ?? (tsRevenue && tsNetIncome ? tsNetIncome / tsRevenue : null);
 
-    // shares: from quoteSummary, chart meta, or timeseries
     const sharesOutstanding = ks.sharesOutstanding ?? chart.sharesOutstanding ?? latest(tsMap, 'annualShareIssued');
-
-    // marketCap: from chart meta, or compute
     const price = chart.price;
     const marketCap = chart.marketCap ?? (sharesOutstanding && price ? sharesOutstanding * price : null);
 
@@ -157,13 +157,13 @@ app.get('/api/quote/:ticker', async (req, res) => {
       symbol: t,
       name: chart.name,
       price,
+      change: chart.change,
+      changePercent: chart.changePercent,
       pe: sd.trailingPE ?? latest(tsMap, 'annualPeRatio'),
-      forwardPE: sd.forwardPE ?? (ks.forwardEps && chart.price ? chart.price / ks.forwardEps : null),
       eps: ks.trailingEps ?? latest(tsMap, 'annualDilutedEPS'),
       netMargin,
       marketCap,
       sharesOutstanding,
-      forwardPE: sd.forwardPE ?? (ks.forwardEps && price ? price / ks.forwardEps : null),
     });
   } catch (e) {
     console.error('API ERROR /quote:', e.message);
@@ -286,22 +286,36 @@ app.get('/api/cashflow/:ticker', async (req, res) => {
       'annualChangesInCash',
     ]);
     const years = getYears(map);
-    res.json(years.map(date => ({
-      date,
-      netIncome: getVal(map, 'annualNetIncome', date),
-      depreciationAndAmortization: getVal(map, 'annualDepreciationAmortizationDepletion', date),
-      changeInWorkingCapital: getVal(map, 'annualChangeInWorkingCapital', date),
-      netCashProvidedByOperatingActivities: getVal(map, 'annualOperatingCashFlow', date),
-      capitalExpenditure: getVal(map, 'annualCapitalExpenditure', date),
-      acquisitionsNet: getVal(map, 'annualPurchaseOfBusiness', date),
-      netCashUsedForInvestingActivites: getVal(map, 'annualInvestingCashFlow', date),
-      debtRepayment: getVal(map, 'annualLongTermDebtIssuance', date),
-      commonStockRepurchased: getVal(map, 'annualRepurchaseOfCapitalStock', date),
-      dividendsPaid: getVal(map, 'annualCashDividendsPaid', date),
-      netCashUsedProvidedByFinancingActivities: getVal(map, 'annualFinancingCashFlow', date),
-      netChangeInCash: getVal(map, 'annualChangesInCash', date),
-      freeCashFlow: getVal(map, 'annualFreeCashFlow', date),
-    })));
+    res.json(years.map(date => {
+      const ni    = getVal(map, 'annualNetIncome', date);
+      const da    = getVal(map, 'annualDepreciationAmortizationDepletion', date);
+      const wc    = getVal(map, 'annualChangeInWorkingCapital', date);
+      const capex = getVal(map, 'annualCapitalExpenditure', date);
+      const acq   = getVal(map, 'annualPurchaseOfBusiness', date);
+      const opRaw = getVal(map, 'annualOperatingCashFlow', date);
+      const invRaw = getVal(map, 'annualInvestingCashFlow', date);
+
+      // Fallback: compute from components when direct total is unavailable
+      const opTotal  = opRaw  ?? ((ni != null || da != null || wc != null)  ? (ni ?? 0) + (da ?? 0) + (wc ?? 0) : null);
+      const invTotal = invRaw ?? ((capex != null || acq != null)            ? (capex ?? 0) + (acq ?? 0)          : null);
+
+      return {
+        date,
+        netIncome: ni,
+        depreciationAndAmortization: da,
+        changeInWorkingCapital: wc,
+        netCashProvidedByOperatingActivities: opTotal,
+        capitalExpenditure: capex,
+        acquisitionsNet: acq,
+        netCashUsedForInvestingActivites: invTotal,
+        debtRepayment: getVal(map, 'annualLongTermDebtIssuance', date),
+        commonStockRepurchased: getVal(map, 'annualRepurchaseOfCapitalStock', date),
+        dividendsPaid: getVal(map, 'annualCashDividendsPaid', date),
+        netCashUsedProvidedByFinancingActivities: getVal(map, 'annualFinancingCashFlow', date),
+        netChangeInCash: getVal(map, 'annualChangesInCash', date),
+        freeCashFlow: getVal(map, 'annualFreeCashFlow', date),
+      };
+    }));
   } catch (e) {
     console.error('API ERROR /cashflow:', e.message);
     res.status(500).json({ error: e.message });
@@ -317,24 +331,43 @@ app.get('/api/ratios/:ticker', async (req, res) => {
         'annualTotalRevenue', 'annualGrossProfit', 'annualOperatingIncome', 'annualNetIncome',
         'annualCommonStockEquity', 'annualTotalAssets', 'annualLongTermDebt',
         'annualCurrentAssets', 'annualCurrentLiabilities',
+        'annualAccountsReceivable', 'annualAccountsPayable', 'annualInventory',
+        'annualCostOfRevenue', 'annualCashAndCashEquivalents', 'annualCurrentDebt',
       ]),
       fetchSummary(t, ['financialData']),
     ]);
     const fd = summary.financialData || {};
 
-    const rev  = latest(map, 'annualTotalRevenue');
-    const gp   = latest(map, 'annualGrossProfit');
-    const op   = latest(map, 'annualOperatingIncome');
-    const ni   = latest(map, 'annualNetIncome');
-    const eq   = latest(map, 'annualCommonStockEquity');
-    const ta   = latest(map, 'annualTotalAssets');
-    const ltd  = latest(map, 'annualLongTermDebt');
-    const ca   = latest(map, 'annualCurrentAssets');
-    const cl   = latest(map, 'annualCurrentLiabilities');
+    const rev   = latest(map, 'annualTotalRevenue');
+    const gp    = latest(map, 'annualGrossProfit');
+    const op    = latest(map, 'annualOperatingIncome');
+    const ni    = latest(map, 'annualNetIncome');
+    const eq    = latest(map, 'annualCommonStockEquity');
+    const ta    = latest(map, 'annualTotalAssets');
+    const ltd   = latest(map, 'annualLongTermDebt');
+    const ca    = latest(map, 'annualCurrentAssets');
+    const cl    = latest(map, 'annualCurrentLiabilities');
+    const recv  = latest(map, 'annualAccountsReceivable');
+    const payab = latest(map, 'annualAccountsPayable');
+    const inv   = latest(map, 'annualInventory');
+    const cogs  = latest(map, 'annualCostOfRevenue');
+    const cash  = latest(map, 'annualCashAndCashEquivalents');
+    const std   = latest(map, 'annualCurrentDebt');
+
+    // Efficiency ratios
+    const dso = (rev && recv)   ? Math.round((recv  / rev)  * 365) : null;
+    const dpo = (cogs && payab) ? Math.round((payab / cogs) * 365) : null;
+    const dio = (cogs && inv)   ? Math.round((inv   / cogs) * 365) : null;
+    const ccc = (dso != null && dio != null && dpo != null) ? dso + dio - dpo : null;
+
+    // Net Debt = total debt - cash
+    const netDebt = (std != null || ltd != null || cash != null)
+      ? (std ?? 0) + (ltd ?? 0) - (cash ?? 0)
+      : null;
 
     res.json({
       currentRatioTTM: fd.currentRatio ?? (ca && cl ? ca / cl : null),
-      quickRatioTTM: fd.quickRatio ?? null,
+      quickRatioTTM: fd.quickRatio ?? (ca && cl ? (ca - (inv ?? 0)) / cl : null),
       grossProfitMarginTTM: fd.grossMargins ?? (gp && rev ? gp / rev : null),
       operatingProfitMarginTTM: fd.operatingMargins ?? (op && rev ? op / rev : null),
       netProfitMarginTTM: fd.profitMargins ?? (ni && rev ? ni / rev : null),
@@ -343,10 +376,11 @@ app.get('/api/ratios/:ticker', async (req, res) => {
       longTermDebtToCapitalizationTTM: fd.debtToEquity
         ? fd.debtToEquity / 100
         : (ltd && eq ? ltd / (ltd + eq) : null),
-      daysOfSalesOutstandingTTM: null,
-      daysPayablesOutstandingTTM: null,
-      daysOfInventoryOutstandingTTM: null,
-      cashConversionCycleTTM: null,
+      daysOfSalesOutstandingTTM: dso,
+      daysPayablesOutstandingTTM: dpo,
+      daysOfInventoryOutstandingTTM: dio,
+      cashConversionCycleTTM: ccc,
+      netDebt,
     });
   } catch (e) {
     console.error('API ERROR /ratios:', e.message);
@@ -354,14 +388,19 @@ app.get('/api/ratios/:ticker', async (req, res) => {
   }
 });
 
-// Charts
+// Charts — includes EPS and YoY growth rates
 app.get('/api/charts/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
     const [annualMap, quarterlyMap] = await Promise.all([
-      fetchTimeSeries(t, ['annualTotalRevenue', 'annualNetIncome', 'annualPeRatio', 'annualTotalAssets', 'annualTotalLiabilitiesNetMinorityInterest', 'annualChangesInCash']),
-      fetchTimeSeries(t, ['quarterlyTotalRevenue', 'quarterlyNetIncome']),
+      fetchTimeSeries(t, [
+        'annualTotalRevenue', 'annualNetIncome', 'annualPeRatio',
+        'annualTotalAssets', 'annualTotalLiabilitiesNetMinorityInterest',
+        'annualChangesInCash', 'annualDilutedEPS',
+      ]),
+      fetchTimeSeries(t, ['quarterlyTotalRevenue', 'quarterlyNetIncome', 'quarterlyDilutedEPS']),
     ]);
+
     const annualYears = getYears(annualMap);
     const annualData = annualYears.map(date => ({
       date: date.slice(0, 4),
@@ -371,7 +410,17 @@ app.get('/api/charts/:ticker', async (req, res) => {
       totalLiabilities: getVal(annualMap, 'annualTotalLiabilitiesNetMinorityInterest', date),
       cashChange: getVal(annualMap, 'annualChangesInCash', date),
       pe: getVal(annualMap, 'annualPeRatio', date),
+      eps: getVal(annualMap, 'annualDilutedEPS', date),
     })).reverse();
+
+    // Compute YoY growth for annual data
+    annualData.forEach((d, i) => {
+      const prev = annualData[i - 1];
+      d.revenueGrowth = (prev?.revenue && d.revenue != null)
+        ? (d.revenue - prev.revenue) / Math.abs(prev.revenue) : null;
+      d.epsGrowth = (prev?.eps && d.eps != null)
+        ? (d.eps - prev.eps) / Math.abs(prev.eps) : null;
+    });
 
     const qDates = [...new Set((quarterlyMap.quarterlyTotalRevenue || []).map(p => p.date))]
       .sort((a, b) => a.localeCompare(b)).slice(-12);
@@ -379,7 +428,17 @@ app.get('/api/charts/:ticker', async (req, res) => {
       date: date.slice(0, 7),
       revenue: getVal(quarterlyMap, 'quarterlyTotalRevenue', date),
       netIncome: getVal(quarterlyMap, 'quarterlyNetIncome', date),
+      eps: getVal(quarterlyMap, 'quarterlyDilutedEPS', date),
     }));
+
+    // Compute quarterly YoY growth (same quarter last year = index i-4)
+    quarterlyData.forEach((d, i) => {
+      const prevYear = quarterlyData[i - 4];
+      d.revenueGrowth = (prevYear?.revenue && d.revenue != null)
+        ? (d.revenue - prevYear.revenue) / Math.abs(prevYear.revenue) : null;
+      d.epsGrowth = (prevYear?.eps && d.eps != null)
+        ? (d.eps - prevYear.eps) / Math.abs(prevYear.eps) : null;
+    });
 
     res.json({ annual: annualData, quarterly: quarterlyData });
   } catch (e) {
@@ -455,7 +514,6 @@ app.get('/api/calc-data/:ticker', async (req, res) => {
       ?? (tsRevenue && tsNetIncome ? tsNetIncome / tsRevenue : null)
       ?? history[0]?.netMargin ?? null;
 
-    // history is oldest→newest after .reverse(), so use last two entries
     const lastIdx = history.length - 1;
     const calcRevenueGrowth = (lastIdx >= 1 && history[lastIdx]?.revenue && history[lastIdx - 1]?.revenue && history[lastIdx - 1].revenue !== 0)
       ? (history[lastIdx].revenue - history[lastIdx - 1].revenue) / Math.abs(history[lastIdx - 1].revenue) : null;
@@ -465,7 +523,6 @@ app.get('/api/calc-data/:ticker', async (req, res) => {
       current: {
         price,
         pe: sd.trailingPE ?? latest(map, 'annualPeRatio'),
-        forwardPE: sd.forwardPE ?? (ks.forwardEps && price ? price / ks.forwardEps : null),
         eps: ks.trailingEps ?? latest(map, 'annualDilutedEPS'),
         netMargin: latestNetMargin,
         marketCap,

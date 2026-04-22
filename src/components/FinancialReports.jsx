@@ -339,10 +339,10 @@ function RatiosTab({ ratios }) {
       ]} />
 
       <RatioCard title="יעילות" items={[
-        { name: 'ימי לקוחות (DSO)', value: fmtRaw(r.daysOfSalesOutstandingTTM) + ' ימים', formula: '(לקוחות ÷ הכנסות) × 365' },
-        { name: 'ימי ספקים (DPO)', value: fmtRaw(r.daysPayablesOutstandingTTM) + ' ימים', formula: '(ספקים ÷ עלות מכר) × 365' },
-        { name: 'ימי מלאי (DIO)', value: fmtRaw(r.daysOfInventoryOutstandingTTM) + ' ימים', formula: '(מלאי ÷ עלות מכר) × 365' },
-        { name: 'מחזור המרה למזומן (CCC)', value: fmtRaw(r.cashConversionCycleTTM) + ' ימים', formula: 'DSO + DIO − DPO' },
+        { name: 'ימי לקוחות (DSO)', value: r.daysOfSalesOutstandingTTM != null ? `${r.daysOfSalesOutstandingTTM} ימים` : '—', formula: '(לקוחות ÷ הכנסות) × 365' },
+        { name: 'ימי ספקים (DPO)', value: r.daysPayablesOutstandingTTM != null ? `${r.daysPayablesOutstandingTTM} ימים` : '—', formula: '(ספקים ÷ עלות מכר) × 365' },
+        { name: 'ימי מלאי (DIO)', value: r.daysOfInventoryOutstandingTTM != null ? `${r.daysOfInventoryOutstandingTTM} ימים` : '—', formula: '(מלאי ÷ עלות מכר) × 365' },
+        { name: 'מחזור המרה למזומן (CCC)', value: r.cashConversionCycleTTM != null ? `${r.cashConversionCycleTTM} ימים` : '—', formula: 'DSO + DIO − DPO' },
       ]} />
 
       <RatioCard title="תשואה" items={[
@@ -352,7 +352,7 @@ function RatiosTab({ ratios }) {
 
       <RatioCard title="מבנה הון" items={[
         { name: 'חוב לטווח ארוך להון', value: fmtRaw(r.longTermDebtToCapitalizationTTM), formula: 'חוב ארוך טווח ÷ (חוב + הון עצמי)' },
-        { name: 'חוב נטו (Net Debt)', value: '(ראה מאזן)', formula: 'חוב כולל − מזומנים ושווי מזומנים' },
+        { name: 'חוב נטו (Net Debt)', value: (() => { const v = r.netDebt; if (v == null) return '—'; const abs = Math.abs(v); const sign = v < 0 ? '-' : ''; if (abs >= 1e12) return `${sign}$${(abs/1e12).toFixed(2)}T`; if (abs >= 1e9) return `${sign}$${(abs/1e9).toFixed(1)}B`; return `${sign}$${(abs/1e6).toFixed(0)}M`; })(), formula: 'חוב קצר + חוב ארוך − מזומנים' },
       ]} />
     </div>
   );

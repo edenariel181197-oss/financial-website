@@ -20,23 +20,38 @@ function calcCAGR(future, current, years) {
   return (Math.pow(future / current, 1 / years) - 1) * 100;
 }
 
+function Tooltip({ text }) {
+  const [vis, setVis] = useState(false);
+  return (
+    <span className="tooltip-wrap" onMouseEnter={() => setVis(true)} onMouseLeave={() => setVis(false)}>
+      <span className="tooltip-icon">?</span>
+      {vis && <span className="tooltip-box">{text}</span>}
+    </span>
+  );
+}
+
 const SCENARIOS = [
-  { key: 'pess', label: 'פסימי', color: 'scenario-red' },
-  { key: 'neut', label: 'ניטרלי', color: 'scenario-blue' },
-  { key: 'opt', label: 'אופטימי', color: 'scenario-green' },
+  {
+    key: 'pess', label: 'פסימי', color: 'scenario-red',
+    desc: 'הנחה שמרנית — צמיחה מואטת, מכפיל רווח נמוך. מייצג תרחיש של איכזוב בתוצאות או האטה כלכלית.',
+  },
+  {
+    key: 'neut', label: 'ניטרלי', color: 'scenario-blue',
+    desc: 'המשך המגמה הנוכחית — ביצועים יציבים ללא שינוי מהותי בקצב הצמיחה או במכפיל השוק.',
+  },
+  {
+    key: 'opt', label: 'אופטימי', color: 'scenario-green',
+    desc: 'תרחיש חיובי — האצה בצמיחה, שיפור שולים ועלייה במכפיל. מייצג ביצועים מעל התחזית.',
+  },
 ];
 
 export default function Calculator2({ ticker }) {
   const [calcData, setCalcData] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Header inputs
   const [netMargin, setNetMargin] = useState('');
   const [revenueGrowth, setRevenueGrowth] = useState('');
-
-  // Scenario P/E inputs [pess, neut, opt]
   const [peInputs, setPeInputs] = useState({ pess: '', neut: '', opt: '' });
-
   const [results, setResults] = useState(null);
 
   useEffect(() => {
@@ -45,10 +60,8 @@ export default function Calculator2({ ticker }) {
     setResults(null);
     getCalcData(ticker).then(d => {
       setCalcData(d);
-      // netMargin: prefer current (TTM), fallback to most recent annual history
       const margin = d.current?.netMargin ?? d.history?.[0]?.netMargin;
       if (margin != null) setNetMargin((margin * 100).toFixed(1));
-      // revenueGrowth: prefer current (YoY), fallback already computed server-side
       const growth = d.current?.revenueGrowth;
       if (growth != null) setRevenueGrowth((growth * 100).toFixed(1));
       setLoading(false);
@@ -58,11 +71,9 @@ export default function Calculator2({ ticker }) {
   const history = calcData?.history?.slice(0, 5) || [];
   const current = calcData?.current || {};
 
-  // Most recent year is last in the ascending array
   const baseRevenue = history[history.length - 1]?.revenue ?? null;
   const baseYear = history.length > 0 ? parseInt(history[history.length - 1].year) : new Date().getFullYear();
 
-  // Live projected years — update as user types
   const projYears = (() => {
     const margin = parseFloat(netMargin) / 100;
     const growth = parseFloat(revenueGrowth) / 100;
@@ -79,7 +90,6 @@ export default function Calculator2({ ticker }) {
     const growth = parseFloat(revenueGrowth) / 100;
     const shares = current.sharesOutstanding;
     const mktPrice = current.price;
-
     if (!baseRevenue || isNaN(margin) || isNaN(growth)) return;
 
     const rev5 = baseRevenue * Math.pow(1 + growth, 5);
@@ -118,23 +128,33 @@ export default function Calculator2({ ticker }) {
   return (
     <div className="calc-luxury">
       <div className="calc-lux-header">
-        <h2>מחשבון הערכת שווי — הכנסות</h2>
+        <h2>♦ מחשבון הערכת שווי — הכנסות</h2>
         {!ticker && <p className="lux-hint">הכנס טיקר חברה בראש הדף לטעינה אוטומטית</p>}
         {loading && <p className="lux-hint">טוען נתונים עבור {ticker}...</p>}
       </div>
 
-      {/* Header data row */}
+      {/* Inputs */}
       <div className="lux-section">
         <div className="lux-data-row">
           {[
-            { label: 'שולי רווח נקי %', val: netMargin, set: setNetMargin, editable: true },
-            { label: 'קצב צמיחת הכנסות %', val: revenueGrowth, set: setRevenueGrowth, editable: true },
-            { label: 'מחיר מניה נוכחי', val: current.price != null ? `$${fmtNum(current.price)}` : '—', editable: false },
+            {
+              label: 'שולי רווח נקי %',
+              val: netMargin, set: setNetMargin, editable: true,
+              tip: 'אחוז הרווח הנקי מתוך ההכנסות. מחושב מהדוחות הכספיים האחרונים.',
+            },
+            {
+              label: 'קצב צמיחת הכנסות %',
+              val: revenueGrowth, set: setRevenueGrowth, editable: true,
+              tip: 'קצב הצמיחה השנתי הצפוי בהכנסות לאורך 5 השנים הבאות.',
+            },
+            { label: 'מחיר מניה', val: current.price != null ? `$${fmtNum(current.price)}` : '—', editable: false },
             { label: 'שווי שוק', val: fmtB(current.marketCap), editable: false },
             { label: 'מניות במחזור', val: current.sharesOutstanding ? `${(current.sharesOutstanding / 1e6).toFixed(0)}M` : '—', editable: false },
-          ].map(({ label, val, set, editable }) => (
+          ].map(({ label, val, set, editable, tip }) => (
             <div key={label} className="lux-data-cell">
-              <span className="lux-data-label">{label}</span>
+              <span className="lux-data-label">
+                {label} {tip && <Tooltip text={tip} />}
+              </span>
               {editable
                 ? <input className="lux-inline-input" type="number" value={val} onChange={e => set(e.target.value)} />
                 : <span className="lux-data-value">{val}</span>}
@@ -143,10 +163,60 @@ export default function Calculator2({ ticker }) {
         </div>
       </div>
 
+      {/* 3 Scenarios */}
+      <div className="lux-section">
+        <h3 className="lux-section-title">♦ תרחישים — מכפיל רווח שנה חמישית</h3>
+        <div className="scenarios-grid">
+          {SCENARIOS.map(({ key, label, color, desc }) => (
+            <div key={key} className={`scenario-lux ${color}`}>
+              <div className="scenario-lux-label">{label}</div>
+              <div className="scenario-desc">{desc}</div>
+              <div className="scenario-pe-inputs">
+                <div className="pe-input-group">
+                  <label>מכפיל P/E <Tooltip text="מכפיל הרווח שאתה מניח שהחברה תיסחר בו בשנה החמישית." /></label>
+                  <input className="lux-input" type="number" value={peInputs[key] || ''} placeholder="לדוג׳ 15"
+                    onChange={e => setPeInputs(p => ({ ...p, [key]: e.target.value }))} />
+                </div>
+              </div>
+              {results?.[key] && (
+                <div className="scenario-lux-results">
+                  <div className="s-res-row"><span>שווי שוק שנה 5</span><strong>{fmtB(results[key].mc5)}</strong></div>
+                  {results[key].price5 && <div className="s-res-row"><span>מחיר מניה שנה 5</span><strong>${fmtNum(results[key].price5)}</strong></div>}
+                  <CAGRBadge cagr={results[key].cagr} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button className="lux-btn" onClick={calculate}>חשב תרחישים</button>
+
+      {/* Results */}
+      {results && (
+        <div className="lux-results" style={{ marginTop: '1.5rem' }}>
+          <div className="lux-results-grid">
+            <div className="lux-result-item">
+              <span>הכנסות שנה 5 (משוערות)</span>
+              <strong>{fmtB(results.rev5)}</strong>
+            </div>
+            <div className="lux-result-item">
+              <span>רווח נקי שנה 5</span>
+              <strong>{fmtB(results.netIncome5)}</strong>
+            </div>
+          </div>
+          <div className="cagr-legend-row">
+            <span className="cagr-great">🚀 14.4%+ = פי 2 בחמש שנים</span>
+            <span className="cagr-good">✅ 12–14.4% = מעל היעד</span>
+            <span className="cagr-bad">❌ מתחת ל-12%</span>
+          </div>
+        </div>
+      )}
+
       {/* Historical + Projected table */}
       {history.length > 0 && (
-        <div className="lux-section">
-          <h3 className="lux-section-title">היסטוריה פיננסית + תחזית 5 שנים</h3>
+        <div className="lux-section" style={{ marginTop: '1.5rem' }}>
+          <h3 className="lux-section-title">♦ היסטוריה פיננסית + תחזית 5 שנים</h3>
           <div className="eps-table-wrap">
             <table className="lux-table">
               <thead>
@@ -181,53 +251,7 @@ export default function Calculator2({ ticker }) {
         </div>
       )}
 
-      {/* 3 Scenarios */}
-      <div className="lux-section">
-        <h3 className="lux-section-title">תרחישים — מכפיל רווח שנה חמישית</h3>
-        <div className="scenarios-grid">
-          {SCENARIOS.map(({ key, label, color }) => (
-            <div key={key} className={`scenario-lux ${color}`}>
-              <div className="scenario-lux-label">{label}</div>
-              <div className="scenario-pe-inputs">
-                <div className="pe-input-group">
-                  <label>P/E נמוך</label>
-                  <input className="lux-input" type="number" value={peInputs[key] || ''} placeholder="לדוג׳ 15"
-                    onChange={e => setPeInputs(p => ({ ...p, [key]: e.target.value }))} />
-                </div>
-              </div>
-              {results?.[key] && (
-                <div className="scenario-lux-results">
-                  <div className="s-res-row"><span>שווי שוק שנה 5</span><strong>{fmtB(results[key].mc5)}</strong></div>
-                  {results[key].price5 && <div className="s-res-row"><span>מחיר מניה שנה 5</span><strong>${fmtNum(results[key].price5)}</strong></div>}
-                  <CAGRBadge cagr={results[key].cagr} />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <button className="lux-btn" onClick={calculate}>חשב תרחישים</button>
-
-      {results && (
-        <div className="lux-results" style={{ marginTop: '1.5rem' }}>
-          <div className="lux-results-grid">
-            <div className="lux-result-item">
-              <span>הכנסות שנה 5 (משוערות)</span>
-              <strong>{fmtB(results.rev5)}</strong>
-            </div>
-            <div className="lux-result-item">
-              <span>רווח נקי שנה 5</span>
-              <strong>{fmtB(results.netIncome5)}</strong>
-            </div>
-          </div>
-          <div className="cagr-legend-row">
-            <span className="cagr-great">🚀 14.4%+ = פי 2 בחמש שנים</span>
-            <span className="cagr-good">✅ 12–14.4% = מעל היעד</span>
-            <span className="cagr-bad">❌ מתחת ל-12%</span>
-          </div>
-        </div>
-      )}
+      <p className="calc-disclaimer">כלי זה מיועד למטרות לימוד בלבד ואינו מהווה ייעוץ השקעות. אין להסתמך על תוצאות המחשבון לצורך קבלת החלטות השקעה.</p>
     </div>
   );
 }

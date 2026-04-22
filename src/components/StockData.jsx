@@ -38,17 +38,49 @@ export default function StockData({ ticker }) {
     return <span className={v >= 0 ? 'positive' : 'negative'}>{v >= 0 ? '+' : ''}{(v * 100).toFixed(1)}%</span>;
   };
 
+  const fmtMC = (mc) => {
+    if (!mc) return '—';
+    if (mc >= 1e12) return `$${(mc / 1e12).toFixed(2)}T`;
+    if (mc >= 1e9)  return `$${(mc / 1e9).toFixed(1)}B`;
+    return `$${(mc / 1e6).toFixed(0)}M`;
+  };
+
+  const changePos = quote.changePercent >= 0;
+
   return (
     <div className="stock-data-panel">
-      {quote.name && <div className="company-name">{quote.name} ({ticker})</div>}
+      {/* Row 1: Company name + ticker */}
+      <div className="stock-header-row">
+        {quote.name && (
+          <div className="stock-company-name">
+            {quote.name}
+            <span className="stock-ticker-badge">{ticker}</span>
+          </div>
+        )}
 
-      {/* Current metrics */}
+        {/* Price + daily change */}
+        {quote.price != null && (
+          <div className="stock-price-block">
+            <span className="stock-price">${fmtRaw(quote.price)}</span>
+            {quote.changePercent != null && (
+              <span className={`stock-change ${changePos ? 'positive' : 'negative'}`}>
+                {changePos ? '▲' : '▼'} {Math.abs(quote.changePercent).toFixed(2)}%
+                {quote.change != null && (
+                  <span className="stock-change-abs">
+                    ({changePos ? '+' : ''}{fmtRaw(quote.change)})
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Row 2: Key metrics */}
       <div className="metrics-grid">
         {[
-          { label: 'מחיר', val: `$${fmtRaw(quote.price)}` },
-          { label: 'שווי שוק', val: (() => { const mc = quote.marketCap ?? (quote.sharesOutstanding && quote.price ? quote.sharesOutstanding * quote.price : null); if (!mc) return '—'; if (mc >= 1e12) return `$${(mc/1e12).toFixed(2)}T`; if (mc >= 1e9) return `$${(mc/1e9).toFixed(1)}B`; return `$${(mc/1e6).toFixed(0)}M`; })() },
+          { label: 'שווי שוק', val: fmtMC(quote.marketCap ?? (quote.sharesOutstanding && quote.price ? quote.sharesOutstanding * quote.price : null)) },
           { label: 'P/E', val: fmtRaw(quote.pe) },
-
           { label: 'EPS (TTM)', val: `$${fmtRaw(quote.eps)}` },
           { label: 'שולי רווח נקי', val: fmtPct(quote.netMargin) },
         ].map(({ label, val }) => (
@@ -59,13 +91,13 @@ export default function StockData({ ticker }) {
         ))}
       </div>
 
-      {/* Quarterly growth tables */}
+      {/* Row 3: Quarterly growth tables */}
       <div className="quarterly-tables">
         {revGrowth.length > 0 && (
           <div className="q-table-wrap">
-            <h4>קצב צמיחת הכנסות — רבעוני (YoY)</h4>
+            <h4>צמיחת הכנסות — רבעוני (YoY)</h4>
             <table className="q-table">
-              <thead><tr><th>רבעון</th><th>הכנסות</th><th>צמיחה YoY</th></tr></thead>
+              <thead><tr><th>רבעון</th><th>הכנסות</th><th>צמיחה</th></tr></thead>
               <tbody>
                 {revGrowth.map(r => (
                   <tr key={r.date}>
@@ -81,9 +113,9 @@ export default function StockData({ ticker }) {
 
         {epsGrowth.length > 0 && (
           <div className="q-table-wrap">
-            <h4>קצב צמיחת EPS — רבעוני (YoY)</h4>
+            <h4>צמיחת EPS — רבעוני (YoY)</h4>
             <table className="q-table">
-              <thead><tr><th>רבעון</th><th>EPS</th><th>צמיחה YoY</th></tr></thead>
+              <thead><tr><th>רבעון</th><th>EPS</th><th>צמיחה</th></tr></thead>
               <tbody>
                 {epsGrowth.map(r => (
                   <tr key={r.date}>
