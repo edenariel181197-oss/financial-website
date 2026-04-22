@@ -427,27 +427,26 @@ app.get('/api/calc-data/:ticker', async (req, res) => {
     const sd = summary.summaryDetail || {};
     const trend5y = summary.earningsTrend?.trend?.find(tr => tr.period === '+5y');
 
-    const latestNetMargin = latestNetMarginCalc;
-    const calcRevenueGrowth = (history[0]?.revenue && history[1]?.revenue && history[1].revenue !== 0)
-      ? (history[0].revenue - history[1].revenue) / Math.abs(history[1].revenue) : null;
-
     const sharesOutstanding = ks.sharesOutstanding ?? chart.sharesOutstanding ?? latest(map, 'annualShareIssued');
     const price = fd.currentPrice ?? chart.price ?? null;
     const marketCap = chart.marketCap ?? (sharesOutstanding && price ? sharesOutstanding * price : null);
 
     const tsRevenue = latest(map, 'annualTotalRevenue');
     const tsNetIncome = latest(map, 'annualNetIncome');
-    const latestNetMarginCalc = fd.profitMargins
+    const latestNetMargin = fd.profitMargins
       ?? latest(map, 'annualNetIncomeRatio')
       ?? (tsRevenue && tsNetIncome ? tsNetIncome / tsRevenue : null)
       ?? history[0]?.netMargin ?? null;
+
+    const calcRevenueGrowth = (history[0]?.revenue && history[1]?.revenue && history[1].revenue !== 0)
+      ? (history[0].revenue - history[1].revenue) / Math.abs(history[1].revenue) : null;
 
     res.json({
       history,
       current: {
         price,
         pe: sd.trailingPE ?? latest(map, 'annualPeRatio'),
-        forwardPE: sd.forwardPE ?? null,
+        forwardPE: sd.forwardPE ?? (ks.forwardEps && price ? price / ks.forwardEps : null),
         eps: ks.trailingEps ?? latest(map, 'annualDilutedEPS'),
         netMargin: latestNetMargin,
         marketCap,
