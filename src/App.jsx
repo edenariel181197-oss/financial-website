@@ -18,6 +18,7 @@ export default function App() {
   const [tickerInput, setTickerInput] = useState('');
   const [ticker, setTicker] = useState('');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   function handleSearch(e) {
     e.preventDefault();
@@ -25,8 +26,16 @@ export default function App() {
     if (t) setTicker(t);
   }
 
+  function handleNavClick(i) {
+    setPage(i);
+    setMobileNavOpen(false);
+  }
+
   return (
-    <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`} dir="rtl">
+    <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''}`} dir="rtl">
+
+      {/* Mobile backdrop */}
+      {mobileNavOpen && <div className="mobile-backdrop" onClick={() => setMobileNavOpen(false)} />}
 
       {/* ── Sidebar ── */}
       <aside className="sidebar">
@@ -45,7 +54,7 @@ export default function App() {
             <button
               key={i}
               className={`nav-item ${page === i ? 'active' : ''}`}
-              onClick={() => setPage(i)}
+              onClick={() => handleNavClick(i)}
             >
               <span className="nav-icon">{item.icon}</span>
               <div className="nav-labels">
@@ -67,28 +76,33 @@ export default function App() {
 
         {/* Top bar */}
         <header className="topbar">
-          <div className="topbar-right">
-            <button className="collapse-btn" onClick={() => setSidebarCollapsed(v => !v)}>
-              {sidebarCollapsed ? '▶' : '◀'}
-            </button>
-            <div className="topbar-page-title">
-              <span className="topbar-icon">{NAV[page].icon}</span>
-              <span>{NAV[page].label}</span>
+          <div className="topbar-top-row">
+            <div className="topbar-right">
+              <button className="collapse-btn desktop-only" onClick={() => setSidebarCollapsed(v => !v)}>
+                {sidebarCollapsed ? '▶' : '◀'}
+              </button>
+              <button className="collapse-btn mobile-only" onClick={() => setMobileNavOpen(v => !v)}>
+                ☰
+              </button>
+              <div className="topbar-page-title">
+                <span className="topbar-icon">{NAV[page].icon}</span>
+                <span>{NAV[page].label}</span>
+              </div>
             </div>
-          </div>
 
-          <form className="ticker-form" onSubmit={handleSearch}>
-            <div className="ticker-input-wrap">
-              <span className="ticker-search-icon">⌕</span>
-              <input
-                className="ticker-input"
-                placeholder="הכנס טיקר... AAPL, MSFT, TSLA"
-                value={tickerInput}
-                onChange={e => setTickerInput(e.target.value)}
-              />
-            </div>
-            <button className="ticker-btn" type="submit">נתח</button>
-          </form>
+            <form className="ticker-form" onSubmit={handleSearch}>
+              <div className="ticker-input-wrap">
+                <span className="ticker-search-icon">⌕</span>
+                <input
+                  className="ticker-input"
+                  placeholder="AAPL, MSFT, TSLA..."
+                  value={tickerInput}
+                  onChange={e => setTickerInput(e.target.value)}
+                />
+              </div>
+              <button className="ticker-btn" type="submit">נתח</button>
+            </form>
+          </div>
         </header>
 
         {/* Stock overview panel */}

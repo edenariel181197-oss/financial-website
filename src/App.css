@@ -218,6 +218,13 @@ h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
   z-index: 50;
   gap: 1.5rem;
 }
+.topbar-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 1.5rem;
+}
 .topbar-right {
   display: flex;
   align-items: center;
@@ -837,6 +844,8 @@ h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
 /* ══════════════════════════════════════════════
    RESPONSIVE
 ══════════════════════════════════════════════ */
+
+/* Tablet */
 @media (max-width: 900px) {
   .sidebar { width: 64px; }
   .app.sidebar-collapsed .sidebar { width: 64px; }
@@ -849,11 +858,89 @@ h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
   .balance-summary-grid { grid-template-columns: 1fr; }
   .balance-equals { display: none; }
 }
+
+/* Mobile */
 @media (max-width: 600px) {
-  .topbar { padding: 0 1rem; }
-  .main { padding: 1.25rem 1rem; }
-  .ticker-input { width: 160px; }
+  .desktop-only { display: none !important; }
+  .mobile-only  { display: flex !important; }
+
+  /* Sidebar — hidden by default, slides in as overlay */
+  .sidebar {
+    width: 0;
+    border-left: none;
+    overflow: hidden;
+    transition: width 0.3s cubic-bezier(.4,0,.2,1);
+  }
+  .app.mobile-nav-open .sidebar {
+    width: 240px;
+    border-left: 1px solid var(--border-gold);
+  }
+  .app.mobile-nav-open .brand-text,
+  .app.mobile-nav-open .nav-labels,
+  .app.mobile-nav-open .nav-pip,
+  .app.mobile-nav-open .sidebar-footer {
+    display: flex !important;
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .app.mobile-nav-open .sidebar-footer { display: block !important; }
+
+  /* Backdrop */
+  .mobile-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 99;
+  }
+
+  /* Main wrapper — full width */
+  .main-wrapper { margin-right: 0; }
+  .app.sidebar-collapsed .main-wrapper { margin-right: 0; }
+
+  /* Topbar — two rows on mobile */
+  .topbar {
+    height: auto;
+    padding: 0.75rem 1rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.6rem;
+  }
+  .topbar-top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  .ticker-form {
+    display: flex;
+    gap: 0.5rem;
+    width: 100%;
+  }
+  .ticker-input-wrap { flex: 1; }
+  .ticker-input { width: 100%; }
+
+  /* Content */
+  .main { padding: 1rem 0.85rem; }
+  .stock-panel-wrapper { padding: 0.85rem 1rem; }
+
+  /* Grids */
   .lux-inputs-grid { grid-template-columns: 1fr; }
   .lux-results-grid { grid-template-columns: 1fr; }
   .lux-data-row { flex-direction: column; }
+  .scenarios-grid { grid-template-columns: 1fr; }
+
+  /* Calculator cards */
+  .calc-luxury { padding: 1.25rem 1rem; }
+  .reports-container { padding: 1.25rem 1rem; }
+
+  /* Metric cards — wrap nicely */
+  .metric-card { min-width: 80px; }
+
+  /* Tables — already have overflow-x: auto */
+  .financial-table { min-width: 500px; }
+  .lux-table { min-width: 400px; }
 }
+
+/* Show/hide helpers */
+.mobile-only { display: none; }
+.desktop-only { display: flex; }
