@@ -124,7 +124,7 @@ app.get('/api/quote/:ticker', async (req, res) => {
     const t = req.params.ticker.toUpperCase();
     const [chart, tsMap, summary] = await Promise.all([
       fetchChart(t),
-      fetchTimeSeries(t, ['annualDilutedEPS', 'annualNetIncomeRatio', 'annualPeRatio']),
+      fetchTimeSeries(t, ['annualDilutedEPS', 'annualNetIncomeRatio', 'annualPeRatio', 'annualTotalRevenue', 'annualNetIncome', 'annualShareIssued']),
       fetchSummary(t, ['summaryDetail', 'defaultKeyStatistics', 'financialData']),
     ]);
 
@@ -132,16 +132,30 @@ app.get('/api/quote/:ticker', async (req, res) => {
     const ks = summary.defaultKeyStatistics || {};
     const fd = summary.financialData || {};
 
+    // netMargin: prefer live, fallback to ratio field, fallback to compute from timeseries
+    const tsRevenue = latest(tsMap, 'annualTotalRevenue');
+    const tsNetIncome = latest(tsMap, 'annualNetIncome');
+    const netMargin = fd.profitMargins
+      ?? latest(tsMap, 'annualNetIncomeRatio')
+      ?? (tsRevenue && tsNetIncome ? tsNetIncome / tsRevenue : null);
+
+    // shares: from quoteSummary, chart meta, or timeseries
+    const sharesOutstanding = ks.sharesOutstanding ?? chart.sharesOutstanding ?? latest(tsMap, 'annualShareIssued');
+
+    // marketCap: from chart meta, or compute
+    const price = chart.price;
+    const marketCap = chart.marketCap ?? (sharesOutstanding && price ? sharesOutstanding * price : null);
+
     res.json({
       symbol: t,
       name: chart.name,
-      price: chart.price,
+      price,
       pe: sd.trailingPE ?? latest(tsMap, 'annualPeRatio'),
       forwardPE: sd.forwardPE ?? null,
       eps: ks.trailingEps ?? latest(tsMap, 'annualDilutedEPS'),
-      netMargin: fd.profitMargins ?? latest(tsMap, 'annualNetIncomeRatio'),
-      marketCap: chart.marketCap,
-      sharesOutstanding: ks.sharesOutstanding ?? chart.sharesOutstanding,
+      netMargin,
+      marketCap,
+      sharesOutstanding,
     });
   } catch (e) {
     console.error('API ERROR /quote:', e.message);
@@ -377,7 +391,7 @@ app.get('/api/calc-data/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
     const [map, chart, summary] = await Promise.all([
-      fetchTimeSeries(t, ['annualDilutedEPS', 'annualTotalRevenue', 'annualNetIncome', 'annualNetIncomeRatio', 'annualPeRatio']),
+      fetchTimeSeries(t, ['annualDilutedEPS', 'annualTotalRevenue', 'annualNetIncome', 'annualNetIncomeRatio', 'annualPeRatio', 'annualShareIssued']),
       fetchChart(t),
       fetchSummary(t, ['financialData', 'defaultKeyStatistics', 'summaryDetail', 'earningsTrend']),
     ]);
@@ -401,13 +415,20 @@ app.get('/api/calc-data/:ticker', async (req, res) => {
     const sd = summary.summaryDetail || {};
     const trend5y = summary.earningsTrend?.trend?.find(tr => tr.period === '+5y');
 
-    const latestNetMargin = fd.profitMargins ?? latest(map, 'annualNetIncomeRatio') ?? history[0]?.netMargin ?? null;
+    const latestNetMargin = latestNetMarginCalc;
     const calcRevenueGrowth = (history[0]?.revenue && history[1]?.revenue && history[1].revenue !== 0)
       ? (history[0].revenue - history[1].revenue) / Math.abs(history[1].revenue) : null;
 
-    const sharesOutstanding = ks.sharesOutstanding ?? chart.sharesOutstanding ?? null;
+    const sharesOutstanding = ks.sharesOutstanding ?? chart.sharesOutstanding ?? latest(map, 'annualShareIssued');
     const price = fd.currentPrice ?? chart.price ?? null;
     const marketCap = chart.marketCap ?? (sharesOutstanding && price ? sharesOutstanding * price : null);
+
+    const tsRevenue = latest(map, 'annualTotalRevenue');
+    const tsNetIncome = latest(map, 'annualNetIncome');
+    const latestNetMarginCalc = fd.profitMargins
+      ?? latest(map, 'annualNetIncomeRatio')
+      ?? (tsRevenue && tsNetIncome ? tsNetIncome / tsRevenue : null)
+      ?? history[0]?.netMargin ?? null;
 
     res.json({
       history,
