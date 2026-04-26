@@ -85,13 +85,13 @@ export default function StockData({ ticker }) {
   // Determine chart color: blue accent if flat/unknown, green/red for clear move
   const chartColor = changePos ? '#22C55E' : '#EF4444';
 
-  const chartData = priceHistory.map(d => ({
+  const priceChartData = priceHistory.map(d => ({
     ...d,
     label: formatTime(d.time, view),
   }));
 
-  const minPrice = chartData.length ? Math.min(...chartData.map(d => d.close)) * 0.999 : 0;
-  const maxPrice = chartData.length ? Math.max(...chartData.map(d => d.close)) * 1.001 : 0;
+  const minPrice = priceChartData.length ? Math.min(...priceChartData.map(d => d.close)) * 0.999 : 0;
+  const maxPrice = priceChartData.length ? Math.max(...priceChartData.map(d => d.close)) * 1.001 : 0;
 
   return (
     <div className="stock-data-panel">
@@ -136,9 +136,9 @@ export default function StockData({ ticker }) {
         </div>
         {chartLoading ? (
           <div className="price-chart-loading">טוען גרף...</div>
-        ) : chartData.length > 0 ? (
+        ) : priceChartData.length > 0 ? (
           <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+            <AreaChart data={priceChartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%"  stopColor={chartColor} stopOpacity={0.25} />
