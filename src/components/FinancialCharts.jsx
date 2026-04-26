@@ -8,9 +8,9 @@ import { getChartData, getEstimates, fmtRaw } from '../utils/api';
 const fmtB = (v) => v == null ? '—' : `$${(v / 1e9).toFixed(1)}B`;
 
 const COLORS = {
-  revenue: '#3D8EFF', netIncome: '#22C55E',
-  assets: '#6AABFF', liabilities: '#EF4444',
-  cash: '#F59E0B', pe: '#A78BFA',
+  revenue: '#4F82C8', netIncome: '#22C55E',
+  assets: '#7AA3D8', liabilities: '#EF4444',
+  cash: '#F59E0B', pe: '#9B8BD4',
   pos: '#22C55E', neg: '#EF4444',
 };
 
@@ -44,8 +44,8 @@ const GrowthTooltip = ({ active, payload, label }) => {
 function GrowthChart({ title, dataKey, label, data }) {
   const [mode, setMode] = useState('annual');
 
-  const source = mode === 'annual' ? data.annual : data.quarterly;
-  const chartData = source
+  const rawSource = mode === 'annual' ? data.annual : (data.quarterly || []).slice(-16);
+  const chartData = rawSource
     .filter(d => d[dataKey] != null)
     .map(d => ({ ...d, pct: +(d[dataKey] * 100).toFixed(1) }));
 
@@ -69,7 +69,7 @@ function GrowthChart({ title, dataKey, label, data }) {
             <XAxis dataKey="date" tick={{ fill: '#8892A4', fontSize: 11 }} />
             <YAxis tickFormatter={v => `${v}%`} tick={{ fill: '#8892A4', fontSize: 11 }} />
             <Tooltip content={<GrowthTooltip />} />
-            <ReferenceLine y={0} stroke="rgba(61,142,255,0.5)" strokeDasharray="4 4" strokeWidth={1.5} />
+            <ReferenceLine y={0} stroke="rgba(79,130,200,0.5)" strokeDasharray="4 4" strokeWidth={1.5} />
             <Bar dataKey="pct" name={label} radius={[4, 4, 0, 0]}>
               {chartData.map((d, i) => (
                 <Cell key={i} fill={d.pct >= 0 ? COLORS.pos : COLORS.neg} />
@@ -100,7 +100,7 @@ export default function FinancialCharts({ ticker }) {
   if (loading) return <div className="data-loading">טוען גרפים...</div>;
   if (!charts) return null;
 
-  const incomeData = incomeMode === 'annual' ? charts.annual : charts.quarterly;
+  const incomeData = incomeMode === 'annual' ? charts.annual : (charts.quarterly || []).slice(-16);
 
   return (
     <div className="charts-section">
@@ -168,7 +168,7 @@ export default function FinancialCharts({ ticker }) {
             <XAxis dataKey="date" tick={{ fill: '#8892A4', fontSize: 11 }} />
             <YAxis tickFormatter={v => `$${(v / 1e9).toFixed(0)}B`} tick={{ fill: '#8892A4', fontSize: 11 }} />
             <Tooltip content={<CustomTooltip />} />
-            <ReferenceLine y={0} stroke="rgba(61,142,255,0.5)" strokeDasharray="4 4" />
+            <ReferenceLine y={0} stroke="rgba(79,130,200,0.5)" strokeDasharray="4 4" />
             <Bar dataKey="cashChange" name="שינוי במזומנים" fill={COLORS.cash} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>

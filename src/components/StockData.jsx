@@ -3,7 +3,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { getQuote, getIncomeStatementQuarterly, getPriceHistory, fmtPct, fmtRaw } from '../utils/api';
+import { getQuote, getChartData, getPriceHistory, fmtPct, fmtRaw } from '../utils/api';
 
 const VIEWS = [
   { key: 'daily',   label: 'יומי'   },
@@ -29,7 +29,7 @@ const PriceTooltip = ({ active, payload }) => {
 
 export default function StockData({ ticker }) {
   const [quote, setQuote] = useState(null);
-  const [quarterly, setQuarterly] = useState(null);
+  const [chartData, setChartData] = useState(null);
   const [priceHistory, setPriceHistory] = useState([]);
   const [view, setView] = useState('monthly');
   const [chartLoading, setChartLoading] = useState(false);
@@ -40,8 +40,8 @@ export default function StockData({ ticker }) {
     if (!ticker) return;
     setLoading(true);
     setError(null);
-    Promise.all([getQuote(ticker), getIncomeStatementQuarterly(ticker)])
-      .then(([q, qtr]) => { setQuote(q); setQuarterly(qtr); setLoading(false); })
+    Promise.all([getQuote(ticker), getChartData(ticker)])
+      .then(([q, cd]) => { setQuote(q); setChartData(cd); setLoading(false); })
       .catch((e) => { setError('שגיאה: ' + e.message); setLoading(false); });
   }, [ticker]);
 
@@ -57,17 +57,16 @@ export default function StockData({ ticker }) {
   if (error) return <div className="data-error">{error}</div>;
   if (!quote) return null;
 
-  const revGrowth = (quarterly || []).slice(0, 8).map((q, i, arr) => {
-    const prev = arr[i + 4];
-    const g = prev?.revenue ? (q.revenue - prev.revenue) / Math.abs(prev.revenue) : null;
-    return { date: q.date, value: q.revenue, growth: g };
-  }).filter(r => r.growth != null).slice(0, 4);
+  const annual = (chartData?.annual || []);
+  const revGrowth = annual
+    .filter(r => r.revenueGrowth != null)
+    .slice(-5)
+    .map(r => ({ date: r.date, value: r.revenue, growth: r.revenueGrowth }));
 
-  const epsGrowth = (quarterly || []).slice(0, 8).map((q, i, arr) => {
-    const prev = arr[i + 4];
-    const g = prev?.eps ? (q.eps - prev.eps) / Math.abs(prev.eps) : null;
-    return { date: q.date, value: q.eps, growth: g };
-  }).filter(r => r.growth != null).slice(0, 4);
+  const epsGrowth = annual
+    .filter(r => r.epsGrowth != null)
+    .slice(-5)
+    .map(r => ({ date: r.date, value: r.eps, growth: r.epsGrowth }));
 
   const GBadge = ({ v }) => {
     if (v == null) return <span>—</span>;
@@ -198,7 +197,7 @@ export default function StockData({ ticker }) {
       <div className="quarterly-tables">
         {revGrowth.length > 0 && (
           <div className="q-table-wrap">
-            <h4>צמיחת הכנסות — רבעוני (YoY)</h4>
+            <h4>צמיחת הכנסות — שנתי (YoY)</h4>
             <table className="q-table">
               <thead><tr><th>רבעון</th><th>הכנסות</th><th>צמיחה</th></tr></thead>
               <tbody>
@@ -215,7 +214,7 @@ export default function StockData({ ticker }) {
         )}
         {epsGrowth.length > 0 && (
           <div className="q-table-wrap">
-            <h4>צמיחת EPS — רבעוני (YoY)</h4>
+            <h4>צמיחת EPS — שנתי (YoY)</h4>
             <table className="q-table">
               <thead><tr><th>רבעון</th><th>EPS</th><th>צמיחה</th></tr></thead>
               <tbody>
