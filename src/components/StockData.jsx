@@ -11,6 +11,7 @@ const VIEWS = [
   { key: 'monthly', label: 'חודשי'  },
   { key: 'yearly',  label: 'שנתי'   },
   { key: 'fiveyr',  label: '5 שנים' },
+  { key: 'all',     label: 'הכל'    },
 ];
 
 function formatTime(ts, view) {
@@ -18,6 +19,7 @@ function formatTime(ts, view) {
   if (view === 'daily')  return d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
   if (view === 'weekly') return d.toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric' });
   if (view === 'fiveyr') return d.toLocaleDateString('he-IL', { month: 'short', year: '2-digit' });
+  if (view === 'all')    return d.getMonth() === 0 ? `1.1.${d.getFullYear()}` : '';
   return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' });
 }
 
@@ -96,6 +98,11 @@ export default function StockData({ ticker }) {
   const minPrice = priceChartData.length ? Math.min(...priceChartData.map(d => d.close)) * 0.999 : 0;
   const maxPrice = priceChartData.length ? Math.max(...priceChartData.map(d => d.close)) * 1.001 : 0;
 
+  // For 'all' view: only tick at Jan 1 of each year
+  const yearTicks = view === 'all'
+    ? priceChartData.filter(d => d.label !== '').map(d => d.label)
+    : null;
+
   return (
     <div className="stock-data-panel">
       {/* Row 1: Company name + price + daily change */}
@@ -152,7 +159,8 @@ export default function StockData({ ticker }) {
               <XAxis
                 dataKey="label"
                 tick={{ fill: '#888', fontSize: 10 }}
-                interval="preserveStartEnd"
+                interval={yearTicks ? 0 : 'preserveStartEnd'}
+                ticks={yearTicks || undefined}
                 tickLine={false}
                 axisLine={false}
               />

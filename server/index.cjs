@@ -458,6 +458,7 @@ app.get('/api/price-history/:ticker', async (req, res) => {
       monthly: { interval: '1d',  range: '1mo' },
       yearly:  { interval: '1wk', range: '1y'  },
       fiveyr:  { interval: '1mo', range: '5y'  },
+      all:     { interval: '1mo', range: 'max' },
     };
     const { interval, range } = cfg[view] || cfg.monthly;
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=${interval}&range=${range}`;
