@@ -554,8 +554,8 @@ h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
 
 /* Calculate button */
 .lux-btn {
-  background: linear-gradient(135deg, var(--gold) 0%, #2464CC 100%);
-  color: var(--navy);
+  background: #FFFFFF;
+  color: #121212;
   border: none;
   padding: 0.85rem 2.75rem;
   border-radius: var(--radius-sm);
@@ -565,13 +565,14 @@ h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
   letter-spacing: 0.08em;
   text-transform: uppercase;
   transition: all 0.2s;
-  box-shadow: 0 4px 20px rgba(79,130,200,0.35);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
   display: block; margin: 0 auto;
   font-family: 'Inter', sans-serif;
 }
 .lux-btn:hover {
+  background: #E8EEFF;
   transform: translateY(-2px);
-  box-shadow: 0 8px 28px rgba(79,130,200,0.5);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
 }
 
 /* Results */
