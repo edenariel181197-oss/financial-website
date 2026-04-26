@@ -456,7 +456,7 @@ app.get('/api/price-history/:ticker', async (req, res) => {
       daily:   { interval: '5m',  range: '1d'  },
       weekly:  { interval: '1h',  range: '5d'  },
       monthly: { interval: '1d',  range: '1mo' },
-      yearly:  { interval: '1wk', range: '1y'  },
+      yearly:  { interval: '1mo', range: 'max' },
       fiveyr:  { interval: '1mo', range: '5y'  },
       all:     { interval: '1mo', range: 'max' },
     };
