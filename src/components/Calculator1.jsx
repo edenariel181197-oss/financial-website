@@ -24,6 +24,7 @@ export default function Calculator1({ ticker }) {
   const [discount, setDiscount] = useState('');
   const [mos, setMos] = useState('30');
   const [result, setResult] = useState(null);
+  const [revGrowthRate, setRevGrowthRate] = useState('');
 
   useEffect(() => {
     if (!ticker) return;
@@ -32,6 +33,8 @@ export default function Calculator1({ ticker }) {
     getCalcData(ticker).then(d => {
       setCalcData(d);
       if (d.current?.pe) setPe5(Math.round(d.current.pe).toString());
+      if (d.current?.revenueGrowth != null)
+        setRevGrowthRate((d.current.revenueGrowth * 100).toFixed(1));
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [ticker]);
@@ -136,6 +139,35 @@ export default function Calculator1({ ticker }) {
             <label>מחיר שוק נוכחי</label>
             <div className="lux-static-val">{current.price != null ? `$${fmtNum(current.price)}` : '—'}</div>
           </div>
+          <div className="lux-input-item">
+            <label>
+              הכנסות שנתיות (TTM){' '}
+              <Tooltip text="סך הכנסות החברה ב-12 החודשים האחרונים. מחושב מהדוחות הכספיים." />
+            </label>
+            <div className="lux-static-val">
+              {history[0]?.revenue != null
+                ? history[0].revenue >= 1e9
+                  ? `$${(history[0].revenue / 1e9).toFixed(1)}B`
+                  : `$${(history[0].revenue / 1e6).toFixed(0)}M`
+                : '—'}
+            </div>
+          </div>
+          <div className="lux-input-item">
+            <label>
+              קצב צמיחת הכנסות % (שנתי){' '}
+              <Tooltip text="קצב הצמיחה השנתי של ההכנסות. מחושב אוטומטית מהדוחות האחרונים." />
+            </label>
+            <input
+              type="number"
+              value={revGrowthRate}
+              onChange={e => setRevGrowthRate(e.target.value)}
+              placeholder="לדוג׳ 10"
+              className="lux-input"
+            />
+            {current.revenueGrowth != null && (
+              <span className="lux-hint-inline">אחרון: {(current.revenueGrowth * 100).toFixed(1)}%</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -211,6 +243,74 @@ export default function Calculator1({ ticker }) {
                 <td className="row-lbl">P/E</td>
                 {history.map(r => <td key={r.year}>{r.pe != null ? fmtNum(r.pe, 1) : '—'}</td>)}
                 {epsProjYears.map(r => <td key={r.year} className="proj-val">—</td>)}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Revenue Table — Historical + Projected */}
+      <div className="lux-section" style={{ marginTop: '1.5rem' }}>
+        <h3 className="lux-section-title">♦ הכנסות — היסטוריה ותחזית</h3>
+        <div className="eps-table-wrap">
+          <table className="lux-table eps-table">
+            <thead>
+              <tr>
+                <th>שנה</th>
+                {history.map(r => <th key={r.year}>{r.year}</th>)}
+                {(() => {
+                  const g = parseFloat(revGrowthRate) / 100;
+                  const baseRev = history[0]?.revenue;
+                  if (!g || !baseRev) return null;
+                  const thisYear = new Date().getFullYear();
+                  return Array.from({ length: 5 }, (_, i) => (
+                    <th key={thisYear + i} className="proj-year">{thisYear + i}E</th>
+                  ));
+                })()}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="row-lbl">הכנסות</td>
+                {history.map(r => (
+                  <td key={r.year}>
+                    {r.revenue != null
+                      ? r.revenue >= 1e9
+                        ? `$${(r.revenue / 1e9).toFixed(1)}B`
+                        : `$${(r.revenue / 1e6).toFixed(0)}M`
+                      : '—'}
+                  </td>
+                ))}
+                {(() => {
+                  const g = parseFloat(revGrowthRate) / 100;
+                  const baseRev = history[0]?.revenue;
+                  if (!g || !baseRev) return null;
+                  const thisYear = new Date().getFullYear();
+                  return Array.from({ length: 5 }, (_, i) => {
+                    const rev = baseRev * Math.pow(1 + g, i + 1);
+                    return (
+                      <td key={thisYear + i} className="proj-val">
+                        {rev >= 1e9 ? `$${(rev / 1e9).toFixed(1)}B` : `$${(rev / 1e6).toFixed(0)}M`}
+                      </td>
+                    );
+                  });
+                })()}
+              </tr>
+              <tr>
+                <td className="row-lbl">שולי רווח נקי</td>
+                {history.map(r => (
+                  <td key={r.year}>
+                    {r.netMargin != null ? `${(r.netMargin * 100).toFixed(1)}%` : '—'}
+                  </td>
+                ))}
+                {(() => {
+                  const g = parseFloat(revGrowthRate) / 100;
+                  const baseRev = history[0]?.revenue;
+                  if (!g || !baseRev) return null;
+                  return Array.from({ length: 5 }, (_, i) => (
+                    <td key={i} className="proj-val">—</td>
+                  ));
+                })()}
               </tr>
             </tbody>
           </table>
