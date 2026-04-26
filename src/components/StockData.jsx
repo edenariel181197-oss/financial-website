@@ -1,9 +1,38 @@
 import { useState, useEffect } from 'react';
-import { getQuote, getIncomeStatementQuarterly, fmtPct, fmtRaw } from '../utils/api';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer,
+} from 'recharts';
+import { getQuote, getIncomeStatementQuarterly, getPriceHistory, fmtPct, fmtRaw } from '../utils/api';
+
+const VIEWS = [
+  { key: 'daily',   label: 'יומי'   },
+  { key: 'weekly',  label: 'שבועי'  },
+  { key: 'monthly', label: 'חודשי'  },
+];
+
+function formatTime(ts, view) {
+  const d = new Date(ts * 1000);
+  if (view === 'daily')   return d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  if (view === 'weekly')  return d.toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric' });
+  return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' });
+}
+
+const PriceTooltip = ({ active, payload }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="chart-tooltip">
+      <p style={{ color: 'var(--gold-light)', fontWeight: 700 }}>${fmtRaw(payload[0].value)}</p>
+    </div>
+  );
+};
 
 export default function StockData({ ticker }) {
   const [quote, setQuote] = useState(null);
   const [quarterly, setQuarterly] = useState(null);
+  const [priceHistory, setPriceHistory] = useState([]);
+  const [view, setView] = useState('monthly');
+  const [chartLoading, setChartLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -16,11 +45,18 @@ export default function StockData({ ticker }) {
       .catch((e) => { setError('שגיאה: ' + e.message); setLoading(false); });
   }, [ticker]);
 
+  useEffect(() => {
+    if (!ticker) return;
+    setChartLoading(true);
+    getPriceHistory(ticker, view)
+      .then(d => { setPriceHistory(d); setChartLoading(false); })
+      .catch(() => setChartLoading(false));
+  }, [ticker, view]);
+
   if (loading) return <div className="data-loading">טוען נתונים עבור {ticker}...</div>;
   if (error) return <div className="data-error">{error}</div>;
   if (!quote) return null;
 
-  // YoY growth: compare quarter i to same quarter last year (index i+4)
   const revGrowth = (quarterly || []).slice(0, 8).map((q, i, arr) => {
     const prev = arr[i + 4];
     const g = prev?.revenue ? (q.revenue - prev.revenue) / Math.abs(prev.revenue) : null;
@@ -47,9 +83,20 @@ export default function StockData({ ticker }) {
 
   const changePos = quote.changePercent >= 0;
 
+  // Determine chart color based on daily performance
+  const chartColor = changePos ? '#4ECDC4' : '#F07070';
+
+  const chartData = priceHistory.map(d => ({
+    ...d,
+    label: formatTime(d.time, view),
+  }));
+
+  const minPrice = chartData.length ? Math.min(...chartData.map(d => d.close)) * 0.999 : 0;
+  const maxPrice = chartData.length ? Math.max(...chartData.map(d => d.close)) * 1.001 : 0;
+
   return (
     <div className="stock-data-panel">
-      {/* Row 1: Company name + ticker */}
+      {/* Row 1: Company name + price + daily change */}
       <div className="stock-header-row">
         {quote.name && (
           <div className="stock-company-name">
@@ -58,7 +105,6 @@ export default function StockData({ ticker }) {
           </div>
         )}
 
-        {/* Price + daily change */}
         {quote.price != null && (
           <div className="stock-price-block">
             <span className="stock-price">${fmtRaw(quote.price)}</span>
@@ -76,7 +122,64 @@ export default function StockData({ ticker }) {
         )}
       </div>
 
-      {/* Row 2: Key metrics */}
+      {/* Price chart */}
+      <div className="price-chart-wrap">
+        <div className="price-chart-controls">
+          {VIEWS.map(v => (
+            <button
+              key={v.key}
+              className={`price-view-btn ${view === v.key ? 'active' : ''}`}
+              onClick={() => setView(v.key)}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+        {chartLoading ? (
+          <div className="price-chart-loading">טוען גרף...</div>
+        ) : chartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={160}>
+            <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={chartColor} stopOpacity={0.25} />
+                  <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fill: '#888', fontSize: 10 }}
+                interval="preserveStartEnd"
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                domain={[minPrice, maxPrice]}
+                tick={{ fill: '#888', fontSize: 10 }}
+                tickFormatter={v => `$${v.toFixed(0)}`}
+                tickLine={false}
+                axisLine={false}
+                width={52}
+              />
+              <Tooltip content={<PriceTooltip />} />
+              <Area
+                type="monotone"
+                dataKey="close"
+                stroke={chartColor}
+                strokeWidth={2}
+                fill="url(#priceGrad)"
+                dot={false}
+                activeDot={{ r: 4, fill: chartColor }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="price-chart-loading">אין נתונים</div>
+        )}
+      </div>
+
+      {/* Key metrics */}
       <div className="metrics-grid">
         {[
           { label: 'שווי שוק', val: fmtMC(quote.marketCap ?? (quote.sharesOutstanding && quote.price ? quote.sharesOutstanding * quote.price : null)) },
@@ -91,7 +194,7 @@ export default function StockData({ ticker }) {
         ))}
       </div>
 
-      {/* Row 3: Quarterly growth tables */}
+      {/* Quarterly growth tables */}
       <div className="quarterly-tables">
         {revGrowth.length > 0 && (
           <div className="q-table-wrap">
@@ -110,7 +213,6 @@ export default function StockData({ ticker }) {
             </table>
           </div>
         )}
-
         {epsGrowth.length > 0 && (
           <div className="q-table-wrap">
             <h4>צמיחת EPS — רבעוני (YoY)</h4>

@@ -1,26 +1,26 @@
 /* ═══════════════════════════════════════════════
    VALUATE — Modern Wealth Design System
-   Navy #0A192F · Gold #C5A059 · Slate #8892A4
+   Black #000000 · Gold #C5A059 · White #FFFFFF
 ═══════════════════════════════════════════════ */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
   /* Core palette */
-  --navy:         #0A192F;
-  --navy-card:    #112240;
-  --navy-raised:  #162d50;
-  --navy-hover:   #1a3460;
+  --navy:         #000000;
+  --navy-card:    #0D0D0D;
+  --navy-raised:  #161616;
+  --navy-hover:   #202020;
   --gold:         #C5A059;
   --gold-light:   #D4B483;
   --gold-faint:   rgba(197,160,89,0.10);
   --gold-border:  rgba(197,160,89,0.22);
   --gold-glow:    rgba(197,160,89,0.35);
-  --slate:        #8892A4;
-  --slate-light:  #A8B2C4;
-  --pearl:        #E6F1FF;
-  --pearl-dim:    rgba(230,241,255,0.65);
-  --border:       rgba(255,255,255,0.07);
+  --slate:        #888888;
+  --slate-light:  #AAAAAA;
+  --pearl:        #FFFFFF;
+  --pearl-dim:    rgba(255,255,255,0.65);
+  --border:       rgba(255,255,255,0.08);
   --border-gold:  rgba(197,160,89,0.20);
 
   /* Semantic */
@@ -38,12 +38,12 @@
   --radius-lg:    20px;
 
   /* Shadows */
-  --shadow-card:  0 4px 24px rgba(0,0,0,0.35), 0 1px 0 rgba(197,160,89,0.08) inset;
+  --shadow-card:  0 4px 24px rgba(0,0,0,0.6), 0 1px 0 rgba(197,160,89,0.08) inset;
   --shadow-glow:  0 0 40px rgba(197,160,89,0.12);
-  --shadow-sm:    0 2px 8px rgba(0,0,0,0.25);
+  --shadow-sm:    0 2px 8px rgba(0,0,0,0.5);
 
   /* Glass */
-  --glass-bg:     rgba(17,34,64,0.65);
+  --glass-bg:     rgba(13,13,13,0.80);
   --glass-border: rgba(197,160,89,0.18);
 
   /* ── Dark-mode infrastructure (semantic aliases) ──────────────
@@ -219,7 +219,7 @@ h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
 /* ── TOP BAR ── */
 .topbar {
   height: var(--topbar-h);
-  background: rgba(10,25,47,0.85);
+  background: rgba(0,0,0,0.92);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border-gold);
@@ -1104,4 +1104,49 @@ h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
   letter-spacing: 0.06em;
   font-weight: 600;
   margin-bottom: 0.4rem;
+}
+
+/* ══════════════════════════════════════════════
+   PRICE CHART (StockData)
+══════════════════════════════════════════════ */
+.price-chart-wrap {
+  margin: 0.75rem 0 1rem;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+}
+.price-chart-controls {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+.price-view-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--slate);
+  padding: 0.25rem 0.7rem;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+.price-view-btn:hover {
+  color: var(--pearl);
+  border-color: rgba(255,255,255,0.25);
+}
+.price-view-btn.active {
+  background: var(--gold-faint);
+  border-color: var(--gold-border);
+  color: var(--gold-light);
+}
+.price-chart-loading {
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--slate);
+  font-size: 0.85rem;
 }

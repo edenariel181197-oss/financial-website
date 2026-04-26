@@ -51,6 +51,11 @@ export async function getCalcData(ticker) {
   return data;
 }
 
+export async function getPriceHistory(ticker, view) {
+  const { data } = await axios.get(`${BASE}/price-history/${ticker}?view=${view}`);
+  return data;
+}
+
 export function fmt(num, decimals = 2) {
   if (num == null || isNaN(num)) return '—';
   if (Math.abs(num) >= 1e9) return (num / 1e9).toFixed(1) + 'B';

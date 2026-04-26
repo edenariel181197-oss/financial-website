@@ -447,6 +447,35 @@ app.get('/api/charts/:ticker', async (req, res) => {
   }
 });
 
+// Price history chart
+app.get('/api/price-history/:ticker', async (req, res) => {
+  try {
+    const t = req.params.ticker.toUpperCase();
+    const view = req.query.view || 'monthly'; // daily | weekly | monthly
+    const cfg = {
+      daily:   { interval: '5m',  range: '1d'  },
+      weekly:  { interval: '1h',  range: '5d'  },
+      monthly: { interval: '1d',  range: '1mo' },
+    };
+    const { interval, range } = cfg[view] || cfg.monthly;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=${interval}&range=${range}`;
+    const r = await fetch(url, { headers: YF_HEADERS });
+    const d = await r.json();
+    const result = d.chart?.result?.[0];
+    if (!result) return res.json([]);
+    const timestamps = result.timestamp || [];
+    const closes = result.indicators?.quote?.[0]?.close || [];
+    const data = timestamps.map((ts, i) => ({
+      time: ts,
+      close: closes[i] != null ? +closes[i].toFixed(2) : null,
+    })).filter(d => d.close != null);
+    res.json(data);
+  } catch (e) {
+    console.error('API ERROR /price-history:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // EPS Estimates
 app.get('/api/estimates/:ticker', async (req, res) => {
   try {
