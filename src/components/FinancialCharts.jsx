@@ -8,10 +8,10 @@ import { getChartData, getEstimates, fmtRaw } from '../utils/api';
 const fmtB = (v) => v == null ? '—' : `$${(v / 1e9).toFixed(1)}B`;
 
 const COLORS = {
-  revenue: '#C5A059', netIncome: '#4ECDC4',
-  assets: '#7EB8D4', liabilities: '#F07070',
-  cash: '#D4B483', pe: '#B8A0D4',
-  pos: '#4ECDC4', neg: '#F07070',
+  revenue: '#3D8EFF', netIncome: '#22C55E',
+  assets: '#6AABFF', liabilities: '#EF4444',
+  cash: '#F59E0B', pe: '#A78BFA',
+  pos: '#22C55E', neg: '#EF4444',
 };
 
 const CustomTooltip = ({ active, payload, label }) => {
@@ -65,11 +65,11 @@ function GrowthChart({ title, dataKey, label, data }) {
       ) : (
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={chartData} margin={{ top: 10, right: 16, left: 8, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1E3A5F" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
             <XAxis dataKey="date" tick={{ fill: '#8892A4', fontSize: 11 }} />
             <YAxis tickFormatter={v => `${v}%`} tick={{ fill: '#8892A4', fontSize: 11 }} />
             <Tooltip content={<GrowthTooltip />} />
-            <ReferenceLine y={0} stroke="var(--gold)" strokeDasharray="4 4" strokeWidth={1.5} />
+            <ReferenceLine y={0} stroke="rgba(61,142,255,0.5)" strokeDasharray="4 4" strokeWidth={1.5} />
             <Bar dataKey="pct" name={label} radius={[4, 4, 0, 0]}>
               {chartData.map((d, i) => (
                 <Cell key={i} fill={d.pct >= 0 ? COLORS.pos : COLORS.neg} />
@@ -116,7 +116,7 @@ export default function FinancialCharts({ ticker }) {
         </div>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={incomeData} margin={{ top: 5, right: 16, left: 8, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1E3A5F" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
             <XAxis dataKey="date" tick={{ fill: '#8892A4', fontSize: 11 }} />
             <YAxis tickFormatter={v => `$${(v / 1e9).toFixed(0)}B`} tick={{ fill: '#8892A4', fontSize: 11 }} />
             <Tooltip content={<CustomTooltip />} />
@@ -148,7 +148,7 @@ export default function FinancialCharts({ ticker }) {
         <div className="chart-header"><h3>סך נכסים מול סך התחייבויות</h3></div>
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={charts.annual} margin={{ top: 5, right: 16, left: 8, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1E3A5F" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
             <XAxis dataKey="date" tick={{ fill: '#8892A4', fontSize: 11 }} />
             <YAxis tickFormatter={v => `$${(v / 1e9).toFixed(0)}B`} tick={{ fill: '#8892A4', fontSize: 11 }} />
             <Tooltip content={<CustomTooltip />} />
@@ -164,11 +164,11 @@ export default function FinancialCharts({ ticker }) {
         <div className="chart-header"><h3>שינוי במזומנים (שנתי)</h3></div>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={charts.annual} margin={{ top: 5, right: 16, left: 8, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1E3A5F" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
             <XAxis dataKey="date" tick={{ fill: '#8892A4', fontSize: 11 }} />
             <YAxis tickFormatter={v => `$${(v / 1e9).toFixed(0)}B`} tick={{ fill: '#8892A4', fontSize: 11 }} />
             <Tooltip content={<CustomTooltip />} />
-            <ReferenceLine y={0} stroke="#C5A059" strokeDasharray="4 4" />
+            <ReferenceLine y={0} stroke="rgba(61,142,255,0.5)" strokeDasharray="4 4" />
             <Bar dataKey="cashChange" name="שינוי במזומנים" fill={COLORS.cash} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
@@ -179,7 +179,7 @@ export default function FinancialCharts({ ticker }) {
         <div className="chart-header"><h3>היסטוריית מכפיל רווח (P/E)</h3></div>
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={charts.annual.filter(d => d.pe != null)} margin={{ top: 5, right: 16, left: 8, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1E3A5F" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
             <XAxis dataKey="date" tick={{ fill: '#8892A4', fontSize: 11 }} />
             <YAxis tick={{ fill: '#8892A4', fontSize: 11 }} />
             <Tooltip content={<CustomTooltip />} />

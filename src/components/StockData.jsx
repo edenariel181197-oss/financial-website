@@ -83,8 +83,8 @@ export default function StockData({ ticker }) {
 
   const changePos = quote.changePercent >= 0;
 
-  // Determine chart color based on daily performance
-  const chartColor = changePos ? '#4ECDC4' : '#F07070';
+  // Determine chart color: blue accent if flat/unknown, green/red for clear move
+  const chartColor = changePos ? '#22C55E' : '#EF4444';
 
   const chartData = priceHistory.map(d => ({
     ...d,
