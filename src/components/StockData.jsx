@@ -9,12 +9,15 @@ const VIEWS = [
   { key: 'daily',   label: 'יומי'   },
   { key: 'weekly',  label: 'שבועי'  },
   { key: 'monthly', label: 'חודשי'  },
+  { key: 'yearly',  label: 'שנתי'   },
+  { key: 'fiveyr',  label: '5 שנים' },
 ];
 
 function formatTime(ts, view) {
   const d = new Date(ts * 1000);
-  if (view === 'daily')   return d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-  if (view === 'weekly')  return d.toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric' });
+  if (view === 'daily')  return d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  if (view === 'weekly') return d.toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric' });
+  if (view === 'fiveyr') return d.toLocaleDateString('he-IL', { month: 'short', year: '2-digit' });
   return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' });
 }
 

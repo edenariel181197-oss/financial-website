@@ -451,11 +451,13 @@ app.get('/api/charts/:ticker', async (req, res) => {
 app.get('/api/price-history/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const view = req.query.view || 'monthly'; // daily | weekly | monthly
+    const view = req.query.view || 'monthly';
     const cfg = {
       daily:   { interval: '5m',  range: '1d'  },
       weekly:  { interval: '1h',  range: '5d'  },
       monthly: { interval: '1d',  range: '1mo' },
+      yearly:  { interval: '1wk', range: '1y'  },
+      fiveyr:  { interval: '1mo', range: '5y'  },
     };
     const { interval, range } = cfg[view] || cfg.monthly;
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=${interval}&range=${range}`;
