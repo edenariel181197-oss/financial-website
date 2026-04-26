@@ -41,42 +41,85 @@ const GrowthTooltip = ({ active, payload, label }) => {
   );
 };
 
-function GrowthChart({ title, dataKey, label, data }) {
-  const [mode, setMode] = useState('annual');
+const fmtAbsVal = (v, isRevenue) => {
+  if (v == null) return '—';
+  if (isRevenue) return v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : `$${(v / 1e6).toFixed(0)}M`;
+  return `$${Number(v).toFixed(2)}`;
+};
 
-  const rawSource = mode === 'annual' ? data.annual : (data.quarterly || []).slice(-16);
-  const chartData = rawSource
+const AbsTooltip = ({ active, payload, label, isRevenue }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="chart-tooltip">
+      <p className="tooltip-label">{label}</p>
+      <p style={{ color: COLORS.revenue, fontWeight: 700 }}>
+        {payload[0]?.name}: {fmtAbsVal(payload[0]?.value, isRevenue)}
+      </p>
+    </div>
+  );
+};
+
+function GrowthChart({ title, dataKey, valueKey, label, data }) {
+  const [mode, setMode] = useState('annual');
+  const isQuarterly = mode === 'quarterly';
+  const isRevenue = valueKey === 'revenue';
+
+  // Annual: YoY growth %; Quarterly: absolute values for last 12 quarters (3 years)
+  const annualChartData = (data.annual || [])
     .filter(d => d[dataKey] != null)
     .map(d => ({ ...d, pct: +(d[dataKey] * 100).toFixed(1) }));
+
+  const quarterlyChartData = (data.quarterly || [])
+    .filter(d => d[valueKey] != null)
+    .slice(-12);
 
   return (
     <div className="chart-card">
       <div className="chart-header">
-        <h3>{title}</h3>
+        <h3>{isQuarterly ? title.replace('YoY %', 'רבעוני — 3 שנים') : title}</h3>
         <div className="chart-toggle">
-          <button className={mode === 'annual' ? 'active' : ''} onClick={() => setMode('annual')}>שנתי</button>
-          <button className={mode === 'quarterly' ? 'active' : ''} onClick={() => setMode('quarterly')}>רבעוני</button>
+          <button className={!isQuarterly ? 'active' : ''} onClick={() => setMode('annual')}>שנתי</button>
+          <button className={isQuarterly ? 'active' : ''} onClick={() => setMode('quarterly')}>רבעוני</button>
         </div>
       </div>
-      {chartData.length === 0 ? (
-        <p style={{ color: 'var(--slate)', padding: '2rem', textAlign: 'center', fontSize: '0.85rem' }}>
-          אין נתוני צמיחה זמינים
-        </p>
+
+      {isQuarterly ? (
+        quarterlyChartData.length === 0 ? (
+          <p style={{ color: 'var(--slate)', padding: '2rem', textAlign: 'center', fontSize: '0.85rem' }}>אין נתונים רבעוניים</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={quarterlyChartData} margin={{ top: 10, right: 16, left: 8, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey="date" tick={{ fill: '#8892A4', fontSize: 10 }} interval={0} angle={-35} textAnchor="end" height={45} />
+              <YAxis tickFormatter={v => fmtAbsVal(v, isRevenue)} tick={{ fill: '#8892A4', fontSize: 11 }} width={60} />
+              <Tooltip content={<AbsTooltip isRevenue={isRevenue} />} />
+              <Bar dataKey={valueKey} name={label} fill={isRevenue ? COLORS.revenue : COLORS.pe} radius={[4, 4, 0, 0]}>
+                {quarterlyChartData.map((d, i) => (
+                  <Cell key={i} fill={isRevenue ? COLORS.revenue : (d[valueKey] >= 0 ? COLORS.pos : COLORS.neg)} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )
       ) : (
-        <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={chartData} margin={{ top: 10, right: 16, left: 8, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-            <XAxis dataKey="date" tick={{ fill: '#8892A4', fontSize: 11 }} />
-            <YAxis tickFormatter={v => `${v}%`} tick={{ fill: '#8892A4', fontSize: 11 }} />
-            <Tooltip content={<GrowthTooltip />} />
-            <ReferenceLine y={0} stroke="rgba(79,130,200,0.5)" strokeDasharray="4 4" strokeWidth={1.5} />
-            <Bar dataKey="pct" name={label} radius={[4, 4, 0, 0]}>
-              {chartData.map((d, i) => (
-                <Cell key={i} fill={d.pct >= 0 ? COLORS.pos : COLORS.neg} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        annualChartData.length === 0 ? (
+          <p style={{ color: 'var(--slate)', padding: '2rem', textAlign: 'center', fontSize: '0.85rem' }}>אין נתוני צמיחה זמינים</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={annualChartData} margin={{ top: 10, right: 16, left: 8, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey="date" tick={{ fill: '#8892A4', fontSize: 11 }} />
+              <YAxis tickFormatter={v => `${v}%`} tick={{ fill: '#8892A4', fontSize: 11 }} />
+              <Tooltip content={<GrowthTooltip />} />
+              <ReferenceLine y={0} stroke="rgba(79,130,200,0.5)" strokeDasharray="4 4" strokeWidth={1.5} />
+              <Bar dataKey="pct" name={label} radius={[4, 4, 0, 0]}>
+                {annualChartData.map((d, i) => (
+                  <Cell key={i} fill={d.pct >= 0 ? COLORS.pos : COLORS.neg} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )
       )}
     </div>
   );
@@ -131,7 +174,8 @@ export default function FinancialCharts({ ticker }) {
       <GrowthChart
         title="קצב צמיחת הכנסות — YoY %"
         dataKey="revenueGrowth"
-        label="צמיחת הכנסות"
+        valueKey="revenue"
+        label="הכנסות"
         data={charts}
       />
 
@@ -139,7 +183,8 @@ export default function FinancialCharts({ ticker }) {
       <GrowthChart
         title="קצב צמיחת EPS — YoY %"
         dataKey="epsGrowth"
-        label="צמיחת EPS"
+        valueKey="eps"
+        label="EPS"
         data={charts}
       />
 

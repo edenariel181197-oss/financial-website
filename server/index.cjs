@@ -423,7 +423,7 @@ app.get('/api/charts/:ticker', async (req, res) => {
     });
 
     const qDates = [...new Set((quarterlyMap.quarterlyTotalRevenue || []).map(p => p.date))]
-      .sort((a, b) => a.localeCompare(b)).slice(-12);
+      .sort((a, b) => a.localeCompare(b)).slice(-16);
     const quarterlyData = qDates.map(date => ({
       date: date.slice(0, 7),
       revenue: getVal(quarterlyMap, 'quarterlyTotalRevenue', date),
