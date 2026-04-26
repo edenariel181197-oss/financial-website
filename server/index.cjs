@@ -468,10 +468,21 @@ app.get('/api/price-history/:ticker', async (req, res) => {
     if (!result) return res.json([]);
     const timestamps = result.timestamp || [];
     const closes = result.indicators?.quote?.[0]?.close || [];
-    const data = timestamps.map((ts, i) => ({
+    let data = timestamps.map((ts, i) => ({
       time: ts,
       close: closes[i] != null ? +closes[i].toFixed(2) : null,
     })).filter(d => d.close != null);
+
+    // For yearly view: aggregate full history to one point per year (last close of each year)
+    if (view === 'yearly') {
+      const byYear = {};
+      data.forEach(p => {
+        const yr = new Date(p.time * 1000).getFullYear();
+        byYear[yr] = p; // last point in each year wins
+      });
+      data = Object.values(byYear);
+    }
+
     res.json(data);
   } catch (e) {
     console.error('API ERROR /price-history:', e.message);

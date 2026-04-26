@@ -18,6 +18,7 @@ function formatTime(ts, view) {
   const d = new Date(ts * 1000);
   if (view === 'daily')  return d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
   if (view === 'weekly') return d.toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric' });
+  if (view === 'yearly') return d.getFullYear().toString();
   if (view === 'fiveyr') return d.toLocaleDateString('he-IL', { month: 'short', year: '2-digit' });
   if (view === 'all')    return d.getMonth() === 0 ? `1.1.${d.getFullYear()}` : '';
   return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' });
@@ -98,10 +99,12 @@ export default function StockData({ ticker }) {
   const minPrice = priceChartData.length ? Math.min(...priceChartData.map(d => d.close)) * 0.999 : 0;
   const maxPrice = priceChartData.length ? Math.max(...priceChartData.map(d => d.close)) * 1.001 : 0;
 
-  // For 'all' view: only tick at Jan 1 of each year
+  // 'all' view: only Jan ticks; 'yearly': every point is a year — show all
   const yearTicks = view === 'all'
     ? priceChartData.filter(d => d.label !== '').map(d => d.label)
-    : null;
+    : view === 'yearly'
+      ? priceChartData.map(d => d.label)
+      : null;
 
   return (
     <div className="stock-data-panel">
