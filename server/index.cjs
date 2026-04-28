@@ -447,13 +447,54 @@ app.get('/api/charts/:ticker', async (req, res) => {
   }
 });
 
-// Company profile — uses timeseries (always works) + chart (always works)
-// quoteSummary is attempted as a bonus but not required
+// Fetch company info from FMP (free tier — requires FMP_API_KEY env var)
+async function fetchFMPProfile(ticker) {
+  const key = process.env.FMP_API_KEY;
+  if (!key) return {};
+  try {
+    const [profileRes, execRes] = await Promise.all([
+      fetch(`https://financialmodelingprep.com/api/v3/profile/${ticker}?apikey=${key}`, { headers: YF_HEADERS }),
+      fetch(`https://financialmodelingprep.com/api/v3/key-executives/${ticker}?apikey=${key}`, { headers: YF_HEADERS }),
+    ]);
+    const profileData = await profileRes.json();
+    const execData    = await execRes.json();
+    const p = Array.isArray(profileData) ? profileData[0] : null;
+    const execs = Array.isArray(execData) ? execData : [];
+    if (!p) return {};
+
+    const officers = execs.slice(0, 8).map(e => ({
+      name:  e.name,
+      title: e.title,
+      age:   e.yearBorn ? (new Date().getFullYear() - e.yearBorn) : null,
+      pay:   e.pay ? '$' + Number(e.pay).toLocaleString() : null,
+    }));
+    const ceo = officers.find(o => /ceo|chief executive/i.test(o.title || '')) || officers[0] || null;
+
+    return {
+      summary:   p.description   || null,
+      sector:    p.sector        || null,
+      industry:  p.industry      || null,
+      country:   p.country       || null,
+      city:      p.city          || null,
+      website:   p.website       || null,
+      employees: p.fullTimeEmployees ? Number(p.fullTimeEmployees) : null,
+      image:     p.image         || null,
+      exchange:  p.exchangeShortName || null,
+      officers,
+      ceo,
+    };
+  } catch (e) {
+    console.error('FMP error:', e.message);
+    return {};
+  }
+}
+
+// Company profile — timeseries + chart always work; FMP adds company info
 app.get('/api/profile/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
 
-    const [chart, tsMap, summary] = await Promise.all([
+    const [chart, tsMap, fmp] = await Promise.all([
       fetchChart(t).catch(() => ({})),
       fetchTimeSeries(t, [
         'annualTotalRevenue', 'annualNetIncome', 'annualNetIncomeRatio',
@@ -461,18 +502,12 @@ app.get('/api/profile/:ticker', async (req, res) => {
         'annualFreeCashFlow', 'annualTotalDebt', 'annualCashAndCashEquivalents',
         'annualShareIssued', 'annualReturnOnEquity',
       ]).catch(() => ({})),
-      fetchSummary(t, ['assetProfile', 'quoteType', 'defaultKeyStatistics', 'summaryDetail', 'financialData']).catch(() => ({})),
+      fetchFMPProfile(t).catch(() => ({})),
     ]);
 
-    const ap  = summary.assetProfile         || {};
-    const qt  = summary.quoteType            || {};
-    const ks  = summary.defaultKeyStatistics || {};
-    const sd  = summary.summaryDetail        || {};
-    const fd  = summary.financialData        || {};
+    const companyName = chart.name || t;
 
-    const companyName = qt.longName || qt.shortName || chart.name || t;
-
-    // Financial metrics from timeseries (primary) or quoteSummary (fallback)
+    // Financial metrics from timeseries
     const fmtPct = v => v != null ? (v * 100).toFixed(1) + '%' : null;
     const latestRevenue    = latest(tsMap, 'annualTotalRevenue');
     const prevRevenue      = (tsMap.annualTotalRevenue || [])[1]?.value ?? null;
@@ -488,9 +523,9 @@ app.get('/api/profile/:ticker', async (req, res) => {
 
     const revenueGrowth = (latestRevenue && prevRevenue && prevRevenue !== 0)
       ? ((latestRevenue - prevRevenue) / Math.abs(prevRevenue) * 100).toFixed(1) + '%'
-      : (fd.revenueGrowth?.fmt || null);
+      : null;
 
-    // 5-year financial history for table
+    // 5-year financial history
     const years = getYears(tsMap);
     const history = years.map(date => ({
       year:      date.slice(0, 4),
@@ -499,12 +534,6 @@ app.get('/api/profile/:ticker', async (req, res) => {
       eps:       getVal(tsMap, 'annualDilutedEPS', date),
       pe:        getVal(tsMap, 'annualPeRatio', date),
     }));
-
-    // Officers from assetProfile (bonus — may be empty if blocked)
-    const officers = (ap.companyOfficers || []).slice(0, 8).map(o => ({
-      name: o.name, title: o.title, age: o.age || null, pay: o.totalPay?.fmt || null,
-    }));
-    const ceo = officers.find(o => /ceo|chief executive/i.test(o.title || '')) || officers[0] || null;
 
     const fmtB = v => {
       if (v == null) return null;
@@ -515,20 +544,23 @@ app.get('/api/profile/:ticker', async (req, res) => {
 
     res.json({
       name:      companyName,
-      summary:   ap.longBusinessSummary || null,
-      sector:    ap.sector || null,
-      industry:  ap.industry || null,
-      country:   ap.country || null,
-      city:      ap.city || null,
-      website:   ap.website || null,
-      employees: ap.fullTimeEmployees || null,
-      officers,
-      ceo,
+      // Company info from FMP
+      summary:   fmp.summary   || null,
+      sector:    fmp.sector    || null,
+      industry:  fmp.industry  || null,
+      country:   fmp.country   || null,
+      city:      fmp.city      || null,
+      website:   fmp.website   || null,
+      employees: fmp.employees || null,
+      image:     fmp.image     || null,
+      exchange:  fmp.exchange  || null,
+      officers:  fmp.officers  || [],
+      ceo:       fmp.ceo       || null,
       // Always available (from timeseries)
-      peTrailing:      latestPE != null ? latestPE.toFixed(1) : (sd.trailingPE?.fmt || null),
-      netMargins:      fmtPct(netMarginRaw)  || fd.profitMargins?.fmt   || null,
-      grossMargins:    fmtPct(grossMarginRaw) || fd.grossMargins?.fmt   || null,
-      roe:             fmtPct(roeRaw)         || fd.returnOnEquity?.fmt  || null,
+      peTrailing:      latestPE != null ? latestPE.toFixed(1) : null,
+      netMargins:      fmtPct(netMarginRaw),
+      grossMargins:    fmtPct(grossMarginRaw),
+      roe:             fmtPct(roeRaw),
       revenueGrowth,
       latestRevenue:   fmtB(latestRevenue),
       latestNetIncome: fmtB(latestNetIncome),
@@ -537,18 +569,6 @@ app.get('/api/profile/:ticker', async (req, res) => {
       latestCash:      fmtB(latestCash),
       latestFCF:       fmtB(latestFCF),
       history,
-      // Bonus from quoteSummary (may be null if Render IP is blocked)
-      peForward:     sd.forwardPE?.fmt        || null,
-      dividendYield: sd.dividendYield?.fmt    || null,
-      week52High:    sd.fiftyTwoWeekHigh?.fmt || null,
-      week52Low:     sd.fiftyTwoWeekLow?.fmt  || null,
-      beta:          ks.beta?.fmt             || null,
-      sharesFloat:   ks.floatShares?.fmt      || null,
-      shortRatio:    ks.shortRatio?.fmt       || null,
-      operatingMargins: fd.operatingMargins?.fmt || null,
-      debtToEquity:  fd.debtToEquity?.fmt     || null,
-      recommendation: fd.recommendationKey    || null,
-      targetPrice:   fd.targetMeanPrice?.fmt  || null,
     });
   } catch (e) {
     console.error('API ERROR /profile:', e.message);

@@ -55,20 +55,13 @@ export default function CompanyProfile({ ticker }) {
     { label: 'רווח נקי (TTM)',  val: profile.latestNetIncome },
     { label: 'EPS (TTM)',        val: profile.latestEPS },
     { label: 'P/E Trailing',    val: profile.peTrailing },
-    { label: 'P/E Forward',     val: profile.peForward },
     { label: 'צמיחת הכנסות',   val: profile.revenueGrowth },
     { label: 'שולי רווח גולמי', val: profile.grossMargins },
-    { label: 'שולי תפעולי',    val: profile.operatingMargins },
     { label: 'שולי רווח נקי',  val: profile.netMargins },
     { label: 'ROE',             val: profile.roe },
-    { label: 'חוב/הון',        val: profile.debtToEquity },
     { label: 'חוב כולל',       val: profile.latestDebt },
     { label: 'מזומן',          val: profile.latestCash },
     { label: 'FCF',             val: profile.latestFCF },
-    { label: 'שיא 52 שבוע',    val: profile.week52High },
-    { label: 'שפל 52 שבוע',    val: profile.week52Low },
-    { label: 'מחיר יעד',       val: profile.targetPrice ? `$${profile.targetPrice}` : null },
-    { label: 'דיבידנד',        val: profile.dividendYield },
   ].filter(s => s.val);
 
   const history = profile.history || [];
