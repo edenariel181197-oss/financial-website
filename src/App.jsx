@@ -4,13 +4,17 @@ import Calculator2 from './components/Calculator2';
 import FinancialReports from './components/FinancialReports';
 import FinancialCharts from './components/FinancialCharts';
 import StockData from './components/StockData';
+import CompanyProfile from './components/CompanyProfile';
+import StockNews from './components/StockNews';
 import './App.css';
 
 const NAV = [
-  { icon: '◈', label: 'מחשבון EPS', sub: 'הערכת שווי DCF' },
-  { icon: '◉', label: 'מחשבון הכנסות', sub: 'תרחישי מכפיל' },
-  { icon: '≡', label: 'דוחות כספיים', sub: 'מאזן · רווח · תזרים' },
-  { icon: '∿', label: 'גרפים ותחזיות', sub: 'ניתוח ויזואלי' },
+  { icon: '◈', label: 'מחשבון EPS',      sub: 'הערכת שווי DCF'    },
+  { icon: '◉', label: 'מחשבון הכנסות',   sub: 'תרחישי מכפיל'      },
+  { icon: '≡', label: 'דוחות כספיים',    sub: 'מאזן · רווח · תזרים' },
+  { icon: '∿', label: 'גרפים ותחזיות',   sub: 'ניתוח ויזואלי'     },
+  { icon: '🏢', label: 'אודות החברה',     sub: 'פרופיל והנהלה'     },
+  { icon: '📰', label: 'חדשות',           sub: 'עדכונים אחרונים'   },
 ];
 
 export default function App() {
@@ -118,6 +122,8 @@ export default function App() {
           {page === 1 && <Calculator2 ticker={ticker} />}
           {page === 2 && <FinancialReports ticker={ticker} />}
           {page === 3 && <FinancialCharts ticker={ticker} />}
+          {page === 4 && <CompanyProfile ticker={ticker} />}
+          {page === 5 && <StockNews ticker={ticker} />}
         </main>
       </div>
     </div>

@@ -1148,3 +1148,163 @@ h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
   color: var(--slate);
   font-size: 0.85rem;
 }
+
+/* ══════════════════════════════════════════════
+   COMPANY PROFILE
+══════════════════════════════════════════════ */
+.profile-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+.profile-stat-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.profile-stat-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--slate);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.profile-stat-val {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--pearl);
+}
+.profile-link {
+  font-size: 0.82rem;
+  color: var(--gold-light);
+  text-decoration: none;
+  word-break: break-all;
+}
+.profile-link:hover { text-decoration: underline; }
+.profile-section {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-top: 2px solid rgba(79,130,200,0.25);
+  border-radius: var(--radius);
+  padding: 1.5rem 1.75rem;
+}
+.profile-section-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.1rem;
+  color: var(--pearl);
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+.profile-description {
+  font-size: 0.88rem;
+  color: var(--slate-light);
+  line-height: 1.8;
+  direction: ltr;
+  text-align: left;
+}
+.profile-expand-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--gold-light);
+  padding: 0.35rem 0.9rem;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-top: 0.85rem;
+  transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+.profile-expand-btn:hover { border-color: var(--gold-border); background: var(--gold-faint); }
+.officers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+.officer-card {
+  background: rgba(20,20,32,0.7);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  transition: border-color 0.2s;
+}
+.officer-card:hover { border-color: var(--gold-border); }
+.officer-name { font-size: 0.9rem; font-weight: 700; color: var(--pearl); }
+.officer-title { font-size: 0.75rem; color: var(--slate-light); }
+.officer-pay { font-size: 0.72rem; color: var(--gold-light); margin-top: 0.2rem; }
+
+/* ══════════════════════════════════════════════
+   STOCK NEWS
+══════════════════════════════════════════════ */
+.news-container { display: flex; flex-direction: column; gap: 1rem; }
+.news-header {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.2rem;
+  color: var(--pearl);
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+.news-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.news-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.25rem;
+  text-decoration: none;
+  transition: border-color 0.2s, background 0.2s;
+  cursor: pointer;
+}
+.news-card:hover {
+  border-color: var(--gold-border);
+  background: rgba(79,130,200,0.05);
+}
+.news-thumb {
+  width: 72px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.news-body { flex: 1; display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.news-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--slate);
+}
+.news-source { font-weight: 700; color: var(--gold-light); }
+.news-dot { color: var(--slate); }
+.news-time { color: var(--slate); }
+.news-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--pearl);
+  line-height: 1.4;
+  direction: ltr;
+  text-align: left;
+}
+.news-card:hover .news-title { color: var(--gold-light); }
+.news-arrow {
+  font-size: 1.4rem;
+  color: var(--slate);
+  flex-shrink: 0;
+  transition: color 0.2s;
+}
+.news-card:hover .news-arrow { color: var(--gold-light); }

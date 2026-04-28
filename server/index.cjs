@@ -447,6 +447,57 @@ app.get('/api/charts/:ticker', async (req, res) => {
   }
 });
 
+// Company profile
+app.get('/api/profile/:ticker', async (req, res) => {
+  try {
+    const t = req.params.ticker.toUpperCase();
+    const summary = await fetchSummary(t, ['assetProfile', 'defaultKeyStatistics', 'summaryDetail']);
+    const ap = summary.assetProfile || {};
+    const ks = summary.defaultKeyStatistics || {};
+    res.json({
+      summary:   ap.longBusinessSummary || null,
+      sector:    ap.sector || null,
+      industry:  ap.industry || null,
+      country:   ap.country || null,
+      city:      ap.city || null,
+      website:   ap.website || null,
+      employees: ap.fullTimeEmployees || null,
+      officers:  (ap.companyOfficers || []).slice(0, 6).map(o => ({
+        name:  o.name,
+        title: o.title,
+        pay:   o.totalPay?.fmt || null,
+      })),
+      beta:        ks.beta?.fmt || null,
+      sharesFloat: ks.floatShares?.fmt || null,
+      shortRatio:  ks.shortRatio?.fmt || null,
+    });
+  } catch (e) {
+    console.error('API ERROR /profile:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Latest news
+app.get('/api/news/:ticker', async (req, res) => {
+  try {
+    const t = req.params.ticker.toUpperCase();
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${t}&quotesCount=0&newsCount=25&enableFuzzyQuery=false`;
+    const r = await fetch(url, { headers: YF_HEADERS });
+    const d = await r.json();
+    const news = (d.news || []).map(item => ({
+      title:     item.title,
+      publisher: item.publisher,
+      link:      item.link,
+      time:      item.providerPublishTime,
+      thumbnail: item.thumbnail?.resolutions?.[0]?.url || null,
+    }));
+    res.json(news);
+  } catch (e) {
+    console.error('API ERROR /news:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Price history chart
 app.get('/api/price-history/:ticker', async (req, res) => {
   try {
