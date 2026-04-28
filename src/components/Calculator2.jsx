@@ -138,6 +138,7 @@ export default function Calculator2({ ticker }) {
         <div className="lux-data-row">
           {[
             { label: 'הכנסות (TTM)', val: fmtB(baseRevenue), editable: false },
+            { label: 'רווח נקי (TTM)', val: fmtB(history[history.length - 1]?.netIncome), editable: false },
             {
               label: 'שולי רווח נקי %',
               val: netMargin, set: setNetMargin, editable: true,
