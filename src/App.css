@@ -1238,7 +1238,7 @@ h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
 .officer-title { font-size: 0.75rem; color: var(--slate-light); }
 .officer-pay { font-size: 0.72rem; color: var(--gold-light); margin-top: 0.2rem; }
 
-/* Profile: header, indices, lists, CEO, tags */
+/* Profile: header, financial grid, CEO, badges */
 .profile-header {
   display: flex;
   align-items: center;
@@ -1251,40 +1251,50 @@ h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
   font-weight: 700;
   color: var(--pearl);
 }
-.profile-indices {
-  display: flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-}
-.profile-index-badge {
-  background: var(--gold-faint);
-  border: 1px solid var(--gold-border);
+.profile-website-link {
+  font-size: 0.8rem;
   color: var(--gold-light);
+  text-decoration: none;
+  opacity: 0.8;
+}
+.profile-website-link:hover { opacity: 1; text-decoration: underline; }
+.profile-rec-badge {
   border-radius: 20px;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  padding: 0.2rem 0.65rem;
+  padding: 0.25rem 0.8rem;
   letter-spacing: 0.04em;
 }
-.profile-list {
-  list-style: none;
+.rec-strong-buy { background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.4); color: #22C55E; }
+.rec-buy        { background: rgba(34,197,94,0.10); border: 1px solid rgba(34,197,94,0.3); color: #4ADE80; }
+.rec-hold       { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.35); color: #F59E0B; }
+.rec-sell       { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.35); color: #EF4444; }
+
+.profile-fin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.65rem;
+}
+.profile-fin-card {
+  background: var(--navy-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.9rem;
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0.2rem;
 }
-.profile-list-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.55rem;
-  font-size: 0.88rem;
-  color: var(--slate-light);
-  line-height: 1.6;
+.profile-fin-label {
+  font-size: 0.63rem;
+  font-weight: 700;
+  color: var(--slate);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
-.profile-list-bullet {
-  color: var(--gold);
-  font-size: 0.55rem;
-  margin-top: 0.38rem;
-  flex-shrink: 0;
+.profile-fin-val {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--pearl);
 }
 .profile-ceo-card {
   background: rgba(79,130,200,0.04);
@@ -1293,44 +1303,37 @@ h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
   padding: 1.1rem 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 0.5rem;
 }
 .profile-ceo-name {
-  font-size: 1.05rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--pearl);
 }
-.profile-ceo-block { display: flex; flex-direction: column; gap: 0.25rem; }
-.profile-ceo-label {
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+.profile-ceo-title {
+  font-size: 0.8rem;
   color: var(--gold-light);
 }
-.profile-ceo-text {
-  font-size: 0.87rem;
-  color: var(--slate-light);
-  line-height: 1.7;
-}
-.profile-tags {
+.profile-ceo-meta {
   display: flex;
+  gap: 0.6rem;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  margin-top: 0.2rem;
 }
-.profile-tag {
+.profile-ceo-chip {
   background: var(--navy-raised);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 0.3rem 0.75rem;
-  font-size: 0.8rem;
-  color: var(--pearl-dim);
-  font-weight: 500;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  color: var(--slate-light);
+  padding: 0.15rem 0.6rem;
 }
 .profile-description {
   font-size: 0.88rem;
   color: var(--slate-light);
   line-height: 1.8;
+  direction: ltr;
+  text-align: left;
 }
 
 /* ══════════════════════════════════════════════

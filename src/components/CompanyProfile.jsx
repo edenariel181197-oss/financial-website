@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react';
 import { getProfile } from '../utils/api';
 
+const REC_LABEL = {
+  'strong_buy':  { label: 'קנייה חזקה', cls: 'rec-strong-buy' },
+  'buy':         { label: 'קנייה',       cls: 'rec-buy'        },
+  'hold':        { label: 'החזקה',       cls: 'rec-hold'       },
+  'underperform':{ label: 'חלש',         cls: 'rec-sell'       },
+  'sell':        { label: 'מכירה',       cls: 'rec-sell'       },
+};
+
 export default function CompanyProfile({ ticker }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -22,11 +30,10 @@ export default function CompanyProfile({ ticker }) {
   if (error) return <div className="data-error">שגיאה: {error}</div>;
   if (!profile) return null;
 
-  const ai = profile.ai || {};
   const summary = profile.summary || '';
-  const shortSummary = summary.length > 500 ? summary.slice(0, 500) + '...' : summary;
+  const shortSummary = summary.length > 600 ? summary.slice(0, 600) + '...' : summary;
 
-  const stats = [
+  const basicStats = [
     { label: 'ענף',           val: profile.industry },
     { label: 'סקטור',         val: profile.sector },
     { label: 'מדינה',         val: profile.country },
@@ -37,55 +44,58 @@ export default function CompanyProfile({ ticker }) {
     { label: 'Short Ratio',   val: profile.shortRatio },
   ].filter(s => s.val);
 
+  const financialStats = [
+    { label: 'P/E Trailing',    val: profile.peTrailing },
+    { label: 'P/E Forward',     val: profile.peForward },
+    { label: 'צמיחת הכנסות',   val: profile.revenueGrowth },
+    { label: 'שולי רווח גולמי', val: profile.grossMargins },
+    { label: 'שולי תפעולי',    val: profile.operatingMargins },
+    { label: 'שולי רווח נקי',  val: profile.netMargins },
+    { label: 'ROE',             val: profile.roe },
+    { label: 'חוב/הון',        val: profile.debtToEquity },
+    { label: 'שיא 52 שבוע',    val: profile.week52High },
+    { label: 'שפל 52 שבוע',    val: profile.week52Low },
+    { label: 'מחיר יעד',       val: profile.targetPrice ? `$${profile.targetPrice}` : null },
+    { label: 'דיבידנד',        val: profile.dividendYield },
+  ].filter(s => s.val);
+
+  const rec = profile.recommendation ? REC_LABEL[profile.recommendation] : null;
+
+  const ceo = profile.ceo;
+  const otherOfficers = (profile.officers || []).filter(o => o !== ceo).slice(0, 7);
+
   return (
     <div className="profile-container">
 
-      {/* Company name + indices */}
+      {/* Header */}
       <div className="profile-header">
-        <h2 className="profile-company-name">{profile.name}</h2>
-        {ai.indices?.length > 0 && (
-          <div className="profile-indices">
-            {ai.indices.map((idx, i) => (
-              <span key={i} className="profile-index-badge">{idx}</span>
-            ))}
-          </div>
+        <h2 className="profile-company-name">{profile.name || ticker}</h2>
+        {rec && <span className={`profile-rec-badge ${rec.cls}`}>{rec.label}</span>}
+        {profile.website && (
+          <a href={profile.website} target="_blank" rel="noopener noreferrer" className="profile-website-link">
+            ↗ {profile.website.replace(/^https?:\/\//, '')}
+          </a>
         )}
       </div>
 
-      {/* Stats grid */}
-      {stats.length > 0 && (
+      {/* Basic info */}
+      {basicStats.length > 0 && (
         <div className="profile-stats-grid">
-          {stats.map(s => (
+          {basicStats.map(s => (
             <div key={s.label} className="profile-stat-card">
               <span className="profile-stat-label">{s.label}</span>
               <span className="profile-stat-val">{s.val}</span>
             </div>
           ))}
-          {profile.website && (
-            <div className="profile-stat-card">
-              <span className="profile-stat-label">אתר</span>
-              <a href={profile.website} target="_blank" rel="noopener noreferrer" className="profile-link">
-                {profile.website.replace(/^https?:\/\//, '')}
-              </a>
-            </div>
-          )}
         </div>
       )}
 
-      {/* AI Hebrew summary */}
-      {ai.summary_he && (
-        <div className="profile-section">
-          <h3 className="profile-section-title">♦ אודות החברה</h3>
-          <p className="profile-description">{ai.summary_he}</p>
-        </div>
-      )}
-
-      {/* Fallback: Yahoo description */}
-      {!ai.summary_he && summary && (
+      {/* Company description */}
+      {summary && (
         <div className="profile-section">
           <h3 className="profile-section-title">♦ אודות החברה</h3>
           <p className="profile-description">{expanded ? summary : shortSummary}</p>
-          {summary.length > 500 && (
+          {summary.length > 600 && (
             <button className="profile-expand-btn" onClick={() => setExpanded(v => !v)}>
               {expanded ? 'הצג פחות ▲' : 'קרא עוד ▼'}
             </button>
@@ -93,76 +103,42 @@ export default function CompanyProfile({ ticker }) {
         </div>
       )}
 
-      {/* Investment thesis */}
-      {ai.thesis?.length > 0 && (
+      {/* Financial highlights */}
+      {financialStats.length > 0 && (
         <div className="profile-section">
-          <h3 className="profile-section-title">♦ תזת השקעה</h3>
-          <ul className="profile-list">
-            {ai.thesis.map((point, i) => (
-              <li key={i} className="profile-list-item">
-                <span className="profile-list-bullet">◆</span>
-                <span>{point}</span>
-              </li>
+          <h3 className="profile-section-title">♦ מדדים פיננסיים</h3>
+          <div className="profile-fin-grid">
+            {financialStats.map(s => (
+              <div key={s.label} className="profile-fin-card">
+                <span className="profile-fin-label">{s.label}</span>
+                <span className="profile-fin-val">{s.val}</span>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       )}
 
       {/* CEO */}
-      {ai.ceo?.name && (
+      {ceo && (
         <div className="profile-section">
           <h3 className="profile-section-title">♦ מנכ&quot;ל</h3>
           <div className="profile-ceo-card">
-            <div className="profile-ceo-name">{ai.ceo.name}</div>
-            {ai.ceo.background && (
-              <div className="profile-ceo-block">
-                <span className="profile-ceo-label">רקע מקצועי</span>
-                <p className="profile-ceo-text">{ai.ceo.background}</p>
-              </div>
-            )}
-            {ai.ceo.vision && (
-              <div className="profile-ceo-block">
-                <span className="profile-ceo-label">חזון אסטרטגי</span>
-                <p className="profile-ceo-text">{ai.ceo.vision}</p>
-              </div>
-            )}
+            <div className="profile-ceo-name">{ceo.name}</div>
+            <div className="profile-ceo-title">{ceo.title}</div>
+            <div className="profile-ceo-meta">
+              {ceo.age && <span className="profile-ceo-chip">גיל: {ceo.age}</span>}
+              {ceo.pay && <span className="profile-ceo-chip">שכר: {ceo.pay}</span>}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Technologies */}
-      {ai.technologies?.length > 0 && (
-        <div className="profile-section">
-          <h3 className="profile-section-title">♦ טכנולוגיות ו-AI</h3>
-          <div className="profile-tags">
-            {ai.technologies.map((tech, i) => (
-              <span key={i} className="profile-tag">{tech}</span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Contracts / Customers */}
-      {ai.contracts?.length > 0 && (
-        <div className="profile-section">
-          <h3 className="profile-section-title">♦ לקוחות ושותפויות</h3>
-          <ul className="profile-list">
-            {ai.contracts.map((c, i) => (
-              <li key={i} className="profile-list-item">
-                <span className="profile-list-bullet">◆</span>
-                <span>{c}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Officers */}
-      {profile.officers?.length > 0 && (
+      {/* Other officers */}
+      {otherOfficers.length > 0 && (
         <div className="profile-section">
           <h3 className="profile-section-title">♦ הנהלה בכירה</h3>
           <div className="officers-grid">
-            {profile.officers.map((o, i) => (
+            {otherOfficers.map((o, i) => (
               <div key={i} className="officer-card">
                 <div className="officer-name">{o.name}</div>
                 <div className="officer-title">{o.title}</div>
