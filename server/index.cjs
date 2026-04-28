@@ -452,9 +452,9 @@ async function fetchFMPProfile(ticker) {
   const key = process.env.FMP_API_KEY;
   if (!key) { console.log('FMP: no API key set'); return {}; }
   try {
-    const profileUrl = `https://financialmodelingprep.com/stable/profile?symbol=${ticker}&apikey=${key}`;
-    const execUrl    = `https://financialmodelingprep.com/stable/key-executives?symbol=${ticker}&apikey=${key}`;
-    console.log('FMP: fetching', profileUrl);
+    const profileUrl = `https://financialmodelingprep.com/api/v3/profile/${ticker}?apikey=${key}`;
+    const execUrl    = `https://financialmodelingprep.com/api/v3/key-executives/${ticker}?apikey=${key}`;
+    console.log('FMP: fetching profile for', ticker);
     const [profileRes, execRes] = await Promise.all([
       fetch(profileUrl, { headers: YF_HEADERS }),
       fetch(execUrl,    { headers: YF_HEADERS }),
@@ -599,6 +599,20 @@ app.get('/api/news/:ticker', async (req, res) => {
   } catch (e) {
     console.error('API ERROR /news:', e.message);
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Debug: test FMP key and raw response
+app.get('/api/debug-fmp/:ticker', async (req, res) => {
+  const key = process.env.FMP_API_KEY;
+  if (!key) return res.json({ error: 'FMP_API_KEY not set' });
+  try {
+    const url = `https://financialmodelingprep.com/api/v3/profile/${req.params.ticker.toUpperCase()}?apikey=${key}`;
+    const r = await fetch(url, { headers: YF_HEADERS });
+    const d = await r.json();
+    res.json({ status: r.status, keyLength: key.length, data: d });
+  } catch (e) {
+    res.json({ error: e.message });
   }
 });
 
