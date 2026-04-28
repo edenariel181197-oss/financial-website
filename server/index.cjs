@@ -450,17 +450,21 @@ app.get('/api/charts/:ticker', async (req, res) => {
 // Fetch company info from FMP (free tier — requires FMP_API_KEY env var)
 async function fetchFMPProfile(ticker) {
   const key = process.env.FMP_API_KEY;
-  if (!key) return {};
+  if (!key) { console.log('FMP: no API key set'); return {}; }
   try {
+    const profileUrl = `https://financialmodelingprep.com/stable/profile?symbol=${ticker}&apikey=${key}`;
+    const execUrl    = `https://financialmodelingprep.com/stable/key-executives?symbol=${ticker}&apikey=${key}`;
+    console.log('FMP: fetching', profileUrl);
     const [profileRes, execRes] = await Promise.all([
-      fetch(`https://financialmodelingprep.com/api/v3/profile/${ticker}?apikey=${key}`, { headers: YF_HEADERS }),
-      fetch(`https://financialmodelingprep.com/api/v3/key-executives/${ticker}?apikey=${key}`, { headers: YF_HEADERS }),
+      fetch(profileUrl, { headers: YF_HEADERS }),
+      fetch(execUrl,    { headers: YF_HEADERS }),
     ]);
     const profileData = await profileRes.json();
     const execData    = await execRes.json();
-    const p = Array.isArray(profileData) ? profileData[0] : null;
+    console.log('FMP profile status:', profileRes.status, 'type:', typeof profileData, Array.isArray(profileData) ? 'array len=' + profileData.length : JSON.stringify(profileData).slice(0, 100));
+    const p = Array.isArray(profileData) ? profileData[0] : (profileData && !profileData['Error Message'] ? profileData : null);
     const execs = Array.isArray(execData) ? execData : [];
-    if (!p) return {};
+    if (!p) { console.log('FMP: empty profile'); return {}; }
 
     const officers = execs.slice(0, 8).map(e => ({
       name:  e.name,
@@ -517,7 +521,8 @@ app.get('/api/profile/:ticker', async (req, res) => {
     const latestDebt       = latest(tsMap, 'annualTotalDebt');
     const latestCash       = latest(tsMap, 'annualCashAndCashEquivalents');
     const latestFCF        = latest(tsMap, 'annualFreeCashFlow');
-    const netMarginRaw     = latest(tsMap, 'annualNetIncomeRatio');
+    const netMarginRaw     = latest(tsMap, 'annualNetIncomeRatio')
+                          ?? (latestRevenue && latestNetIncome ? latestNetIncome / latestRevenue : null);
     const grossMarginRaw   = latest(tsMap, 'annualGrossProfitRatio');
     const roeRaw           = latest(tsMap, 'annualReturnOnEquity');
 
