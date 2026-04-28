@@ -9,6 +9,11 @@ const REC_LABEL = {
   'sell':        { label: 'מכירה',       cls: 'rec-sell'       },
 };
 
+function fmtNum(v, decimals = 1) {
+  if (v == null) return '—';
+  return Number(v).toFixed(decimals);
+}
+
 export default function CompanyProfile({ ticker }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -32,6 +37,7 @@ export default function CompanyProfile({ ticker }) {
 
   const summary = profile.summary || '';
   const shortSummary = summary.length > 600 ? summary.slice(0, 600) + '...' : summary;
+  const rec = profile.recommendation ? REC_LABEL[profile.recommendation] : null;
 
   const basicStats = [
     { label: 'ענף',           val: profile.industry },
@@ -44,7 +50,10 @@ export default function CompanyProfile({ ticker }) {
     { label: 'Short Ratio',   val: profile.shortRatio },
   ].filter(s => s.val);
 
-  const financialStats = [
+  const finStats = [
+    { label: 'הכנסות (TTM)',    val: profile.latestRevenue },
+    { label: 'רווח נקי (TTM)',  val: profile.latestNetIncome },
+    { label: 'EPS (TTM)',        val: profile.latestEPS },
     { label: 'P/E Trailing',    val: profile.peTrailing },
     { label: 'P/E Forward',     val: profile.peForward },
     { label: 'צמיחת הכנסות',   val: profile.revenueGrowth },
@@ -53,14 +62,16 @@ export default function CompanyProfile({ ticker }) {
     { label: 'שולי רווח נקי',  val: profile.netMargins },
     { label: 'ROE',             val: profile.roe },
     { label: 'חוב/הון',        val: profile.debtToEquity },
+    { label: 'חוב כולל',       val: profile.latestDebt },
+    { label: 'מזומן',          val: profile.latestCash },
+    { label: 'FCF',             val: profile.latestFCF },
     { label: 'שיא 52 שבוע',    val: profile.week52High },
     { label: 'שפל 52 שבוע',    val: profile.week52Low },
     { label: 'מחיר יעד',       val: profile.targetPrice ? `$${profile.targetPrice}` : null },
     { label: 'דיבידנד',        val: profile.dividendYield },
   ].filter(s => s.val);
 
-  const rec = profile.recommendation ? REC_LABEL[profile.recommendation] : null;
-
+  const history = profile.history || [];
   const ceo = profile.ceo;
   const otherOfficers = (profile.officers || []).filter(o => o !== ceo).slice(0, 7);
 
@@ -78,7 +89,7 @@ export default function CompanyProfile({ ticker }) {
         )}
       </div>
 
-      {/* Basic info */}
+      {/* Basic info (from quoteSummary — shows if not blocked) */}
       {basicStats.length > 0 && (
         <div className="profile-stats-grid">
           {basicStats.map(s => (
@@ -90,7 +101,53 @@ export default function CompanyProfile({ ticker }) {
         </div>
       )}
 
-      {/* Company description */}
+      {/* Financial highlights — always available from timeseries */}
+      {finStats.length > 0 && (
+        <div className="profile-section">
+          <h3 className="profile-section-title">♦ מדדים פיננסיים</h3>
+          <div className="profile-fin-grid">
+            {finStats.map(s => (
+              <div key={s.label} className="profile-fin-card">
+                <span className="profile-fin-label">{s.label}</span>
+                <span className="profile-fin-val">{s.val}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 5-year history table — always available from timeseries */}
+      {history.length > 0 && (
+        <div className="profile-section">
+          <h3 className="profile-section-title">♦ היסטוריה פיננסית (5 שנים)</h3>
+          <div className="profile-history-wrap">
+            <table className="profile-history-table">
+              <thead>
+                <tr>
+                  <th>שנה</th>
+                  <th>הכנסות</th>
+                  <th>רווח נקי</th>
+                  <th>EPS</th>
+                  <th>P/E</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map(row => (
+                  <tr key={row.year}>
+                    <td className="profile-hist-year">{row.year}</td>
+                    <td>{row.revenue   != null ? '$' + (row.revenue   / 1e9).toFixed(1) + 'B' : '—'}</td>
+                    <td>{row.netIncome != null ? '$' + (row.netIncome / 1e9).toFixed(1) + 'B' : '—'}</td>
+                    <td>{row.eps      != null ? '$' + fmtNum(row.eps, 2)               : '—'}</td>
+                    <td>{row.pe       != null ? fmtNum(row.pe, 1)                       : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Company description (bonus — from quoteSummary) */}
       {summary && (
         <div className="profile-section">
           <h3 className="profile-section-title">♦ אודות החברה</h3>
@@ -103,22 +160,7 @@ export default function CompanyProfile({ ticker }) {
         </div>
       )}
 
-      {/* Financial highlights */}
-      {financialStats.length > 0 && (
-        <div className="profile-section">
-          <h3 className="profile-section-title">♦ מדדים פיננסיים</h3>
-          <div className="profile-fin-grid">
-            {financialStats.map(s => (
-              <div key={s.label} className="profile-fin-card">
-                <span className="profile-fin-label">{s.label}</span>
-                <span className="profile-fin-val">{s.val}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* CEO */}
+      {/* CEO card (bonus — from quoteSummary) */}
       {ceo && (
         <div className="profile-section">
           <h3 className="profile-section-title">♦ מנכ&quot;ל</h3>
@@ -133,7 +175,7 @@ export default function CompanyProfile({ ticker }) {
         </div>
       )}
 
-      {/* Other officers */}
+      {/* Other officers (bonus — from quoteSummary) */}
       {otherOfficers.length > 0 && (
         <div className="profile-section">
           <h3 className="profile-section-title">♦ הנהלה בכירה</h3>

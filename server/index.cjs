@@ -447,25 +447,71 @@ app.get('/api/charts/:ticker', async (req, res) => {
   }
 });
 
-// Company profile
+// Company profile — uses timeseries (always works) + chart (always works)
+// quoteSummary is attempted as a bonus but not required
 app.get('/api/profile/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const [summary, chart] = await Promise.all([
-      fetchSummary(t, ['assetProfile', 'defaultKeyStatistics', 'quoteType', 'summaryDetail', 'financialData']).catch(() => ({})),
+
+    const [chart, tsMap, summary] = await Promise.all([
       fetchChart(t).catch(() => ({})),
+      fetchTimeSeries(t, [
+        'annualTotalRevenue', 'annualNetIncome', 'annualNetIncomeRatio',
+        'annualGrossProfitRatio', 'annualPeRatio', 'annualDilutedEPS',
+        'annualFreeCashFlow', 'annualTotalDebt', 'annualCashAndCashEquivalents',
+        'annualShareIssued', 'annualReturnOnEquity',
+      ]).catch(() => ({})),
+      fetchSummary(t, ['assetProfile', 'quoteType', 'defaultKeyStatistics', 'summaryDetail', 'financialData']).catch(() => ({})),
     ]);
-    const ap = summary.assetProfile || {};
-    const ks = summary.defaultKeyStatistics || {};
-    const qt = summary.quoteType || {};
-    const sd = summary.summaryDetail || {};
-    const fd = summary.financialData || {};
+
+    const ap  = summary.assetProfile         || {};
+    const qt  = summary.quoteType            || {};
+    const ks  = summary.defaultKeyStatistics || {};
+    const sd  = summary.summaryDetail        || {};
+    const fd  = summary.financialData        || {};
+
     const companyName = qt.longName || qt.shortName || chart.name || t;
 
+    // Financial metrics from timeseries (primary) or quoteSummary (fallback)
+    const fmtPct = v => v != null ? (v * 100).toFixed(1) + '%' : null;
+    const latestRevenue    = latest(tsMap, 'annualTotalRevenue');
+    const prevRevenue      = (tsMap.annualTotalRevenue || [])[1]?.value ?? null;
+    const latestNetIncome  = latest(tsMap, 'annualNetIncome');
+    const latestEPS        = latest(tsMap, 'annualDilutedEPS');
+    const latestPE         = latest(tsMap, 'annualPeRatio');
+    const latestDebt       = latest(tsMap, 'annualTotalDebt');
+    const latestCash       = latest(tsMap, 'annualCashAndCashEquivalents');
+    const latestFCF        = latest(tsMap, 'annualFreeCashFlow');
+    const netMarginRaw     = latest(tsMap, 'annualNetIncomeRatio');
+    const grossMarginRaw   = latest(tsMap, 'annualGrossProfitRatio');
+    const roeRaw           = latest(tsMap, 'annualReturnOnEquity');
+
+    const revenueGrowth = (latestRevenue && prevRevenue && prevRevenue !== 0)
+      ? ((latestRevenue - prevRevenue) / Math.abs(prevRevenue) * 100).toFixed(1) + '%'
+      : (fd.revenueGrowth?.fmt || null);
+
+    // 5-year financial history for table
+    const years = getYears(tsMap);
+    const history = years.map(date => ({
+      year:      date.slice(0, 4),
+      revenue:   getVal(tsMap, 'annualTotalRevenue', date),
+      netIncome: getVal(tsMap, 'annualNetIncome', date),
+      eps:       getVal(tsMap, 'annualDilutedEPS', date),
+      pe:        getVal(tsMap, 'annualPeRatio', date),
+    }));
+
+    // Officers from assetProfile (bonus — may be empty if blocked)
     const officers = (ap.companyOfficers || []).slice(0, 8).map(o => ({
       name: o.name, title: o.title, age: o.age || null, pay: o.totalPay?.fmt || null,
     }));
     const ceo = officers.find(o => /ceo|chief executive/i.test(o.title || '')) || officers[0] || null;
+
+    const fmtB = v => {
+      if (v == null) return null;
+      if (Math.abs(v) >= 1e9) return '$' + (v / 1e9).toFixed(1) + 'B';
+      if (Math.abs(v) >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+      return '$' + v.toFixed(0);
+    };
 
     res.json({
       name:      companyName,
@@ -478,22 +524,31 @@ app.get('/api/profile/:ticker', async (req, res) => {
       employees: ap.fullTimeEmployees || null,
       officers,
       ceo,
-      beta:        ks.beta?.fmt || null,
-      sharesFloat: ks.floatShares?.fmt || null,
-      shortRatio:  ks.shortRatio?.fmt || null,
-      peTrailing:  sd.trailingPE?.fmt || null,
-      peForward:   sd.forwardPE?.fmt || null,
-      dividendYield: sd.dividendYield?.fmt || null,
-      week52High:  sd.fiftyTwoWeekHigh?.fmt || null,
-      week52Low:   sd.fiftyTwoWeekLow?.fmt || null,
-      revenueGrowth:  fd.revenueGrowth?.fmt || null,
-      grossMargins:   fd.grossMargins?.fmt || null,
+      // Always available (from timeseries)
+      peTrailing:      latestPE != null ? latestPE.toFixed(1) : (sd.trailingPE?.fmt || null),
+      netMargins:      fmtPct(netMarginRaw)  || fd.profitMargins?.fmt   || null,
+      grossMargins:    fmtPct(grossMarginRaw) || fd.grossMargins?.fmt   || null,
+      roe:             fmtPct(roeRaw)         || fd.returnOnEquity?.fmt  || null,
+      revenueGrowth,
+      latestRevenue:   fmtB(latestRevenue),
+      latestNetIncome: fmtB(latestNetIncome),
+      latestEPS:       latestEPS != null ? '$' + latestEPS.toFixed(2) : null,
+      latestDebt:      fmtB(latestDebt),
+      latestCash:      fmtB(latestCash),
+      latestFCF:       fmtB(latestFCF),
+      history,
+      // Bonus from quoteSummary (may be null if Render IP is blocked)
+      peForward:     sd.forwardPE?.fmt        || null,
+      dividendYield: sd.dividendYield?.fmt    || null,
+      week52High:    sd.fiftyTwoWeekHigh?.fmt || null,
+      week52Low:     sd.fiftyTwoWeekLow?.fmt  || null,
+      beta:          ks.beta?.fmt             || null,
+      sharesFloat:   ks.floatShares?.fmt      || null,
+      shortRatio:    ks.shortRatio?.fmt       || null,
       operatingMargins: fd.operatingMargins?.fmt || null,
-      netMargins:     fd.profitMargins?.fmt || null,
-      roe:            fd.returnOnEquity?.fmt || null,
-      debtToEquity:   fd.debtToEquity?.fmt || null,
-      recommendation: fd.recommendationKey || null,
-      targetPrice:    fd.targetMeanPrice?.fmt || null,
+      debtToEquity:  fd.debtToEquity?.fmt     || null,
+      recommendation: fd.recommendationKey    || null,
+      targetPrice:   fd.targetMeanPrice?.fmt  || null,
     });
   } catch (e) {
     console.error('API ERROR /profile:', e.message);

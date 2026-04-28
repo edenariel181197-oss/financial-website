@@ -1335,6 +1335,29 @@ h1, h2, h3 { font-family: 'Playfair Display', Georgia, serif; }
   direction: ltr;
   text-align: left;
 }
+.profile-history-wrap { overflow-x: auto; }
+.profile-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  text-align: center;
+}
+.profile-history-table th {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--slate);
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.profile-history-table td {
+  padding: 0.55rem 0.75rem;
+  color: var(--pearl-dim);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.profile-history-table tbody tr:hover td { background: var(--navy-raised); }
+.profile-hist-year { font-weight: 700; color: var(--gold-light); }
 
 /* ══════════════════════════════════════════════
    STOCK NEWS
