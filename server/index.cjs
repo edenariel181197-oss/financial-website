@@ -447,14 +447,69 @@ app.get('/api/charts/:ticker', async (req, res) => {
   }
 });
 
+// AI-powered company insights via Claude
+async function generateCompanyInsights(ticker, companyName) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1800,
+        messages: [{
+          role: 'user',
+          content: `You are a senior financial analyst. Provide a structured profile for ${ticker} (${companyName || ticker}).
+Respond ONLY with valid JSON, no markdown fences, no explanation outside the JSON:
+{
+  "summary_he": "2-3 sentences in Hebrew describing what the company does and its core business",
+  "thesis": ["key investment thesis point 1", "point 2", "point 3"],
+  "contracts": ["major customer or contract 1", "major customer or contract 2", "..."],
+  "technologies": ["key technology or AI initiative 1", "tech 2", "..."],
+  "ceo": {
+    "name": "Full CEO name",
+    "background": "Previous roles and career history (2-3 sentences)",
+    "vision": "Stated strategic vision or key initiatives (1-2 sentences)"
+  },
+  "indices": ["S&P 500", "NASDAQ 100", "Russell 1000"]
+}
+Use only publicly known factual information. If unsure about a field, use an empty array or null.`,
+        }],
+      }),
+    });
+    const data = await r.json();
+    const text = data.content?.[0]?.text || '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    return JSON.parse(match[0]);
+  } catch (e) {
+    console.error('AI insights error:', e.message);
+    return null;
+  }
+}
+
 // Company profile
 app.get('/api/profile/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
-    const summary = await fetchSummary(t, ['assetProfile', 'defaultKeyStatistics', 'summaryDetail']);
+    const [summary, chart] = await Promise.all([
+      fetchSummary(t, ['assetProfile', 'defaultKeyStatistics', 'quoteType']).catch(() => ({})),
+      fetchChart(t).catch(() => ({})),
+    ]);
     const ap = summary.assetProfile || {};
     const ks = summary.defaultKeyStatistics || {};
+    const qt = summary.quoteType || {};
+    const companyName = qt.longName || qt.shortName || chart.name || t;
+
+    const ai = await generateCompanyInsights(t, companyName);
+
     res.json({
+      name:      companyName,
       summary:   ap.longBusinessSummary || null,
       sector:    ap.sector || null,
       industry:  ap.industry || null,
@@ -463,13 +518,12 @@ app.get('/api/profile/:ticker', async (req, res) => {
       website:   ap.website || null,
       employees: ap.fullTimeEmployees || null,
       officers:  (ap.companyOfficers || []).slice(0, 6).map(o => ({
-        name:  o.name,
-        title: o.title,
-        pay:   o.totalPay?.fmt || null,
+        name: o.name, title: o.title, pay: o.totalPay?.fmt || null,
       })),
       beta:        ks.beta?.fmt || null,
       sharesFloat: ks.floatShares?.fmt || null,
       shortRatio:  ks.shortRatio?.fmt || null,
+      ai,
     });
   } catch (e) {
     console.error('API ERROR /profile:', e.message);
