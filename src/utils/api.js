@@ -71,6 +71,11 @@ export async function getSectorScreener(sector) {
   return data;
 }
 
+export async function getTickerSearch(query) {
+  const { data } = await axios.get(`${BASE}/ticker-search/${encodeURIComponent(query)}`);
+  return data;
+}
+
 export function fmt(num, decimals = 2) {
   if (num == null || isNaN(num)) return '—';
   if (Math.abs(num) >= 1e9) return (num / 1e9).toFixed(1) + 'B';

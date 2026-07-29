@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Calculator, LineChart, FileText, BarChart3, Building2, Newspaper,
   ArrowLeftRight, Trophy, Diamond, Search, ChevronLeft, ChevronRight, Menu,
@@ -12,6 +12,7 @@ import CompanyProfile from './components/CompanyProfile';
 import StockNews from './components/StockNews';
 import Compare from './components/Compare';
 import SectorScreener from './components/SectorScreener';
+import { getTickerSearch } from './utils/api';
 import './App.css';
 
 const NAV = [
@@ -32,10 +33,69 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const searchTimeoutRef = useRef(null);
+  const searchWrapRef = useRef(null);
+
+  useEffect(() => {
+    function onDocClick(e) {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  function handleTickerInputChange(e) {
+    const val = e.target.value;
+    setTickerInput(val);
+    setActiveIndex(-1);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    const q = val.trim();
+    if (!q) { setSuggestions([]); setShowSuggestions(false); return; }
+    searchTimeoutRef.current = setTimeout(() => {
+      getTickerSearch(q)
+        .then(results => { setSuggestions(results); setShowSuggestions(results.length > 0); })
+        .catch(() => { setSuggestions([]); setShowSuggestions(false); });
+    }, 250);
+  }
+
+  function selectSuggestion(s) {
+    setTickerInput(s.symbol);
+    setTicker(s.symbol);
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setActiveIndex(-1);
+  }
+
+  function handleSearchKeyDown(e) {
+    if (!showSuggestions || !suggestions.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex(i => Math.min(i + 1, suggestions.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex(i => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter' && activeIndex >= 0) {
+      e.preventDefault();
+      selectSuggestion(suggestions[activeIndex]);
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+    }
+  }
+
   function handleSearch(e) {
     e.preventDefault();
+    if (activeIndex >= 0 && suggestions[activeIndex]) {
+      selectSuggestion(suggestions[activeIndex]);
+      return;
+    }
     const t = tickerInput.trim().toUpperCase();
     if (t) setTicker(t);
+    setShowSuggestions(false);
   }
 
   function handleNavClick(i) {
@@ -107,14 +167,33 @@ export default function App() {
             </div>
 
             <form className="ticker-form" onSubmit={handleSearch}>
-              <div className="ticker-input-wrap">
+              <div className="ticker-input-wrap" ref={searchWrapRef}>
                 <span className="ticker-search-icon"><Search size={15} /></span>
                 <input
                   className="ticker-input"
                   placeholder="AAPL, MSFT, TSLA..."
                   value={tickerInput}
-                  onChange={e => setTickerInput(e.target.value)}
+                  onChange={handleTickerInputChange}
+                  onKeyDown={handleSearchKeyDown}
+                  onFocus={() => { if (suggestions.length) setShowSuggestions(true); }}
+                  autoComplete="off"
                 />
+                {showSuggestions && suggestions.length > 0 && (
+                  <ul className="ticker-suggestions">
+                    {suggestions.map((s, i) => (
+                      <li
+                        key={s.symbol}
+                        className={`ticker-suggestion-item ${i === activeIndex ? 'active' : ''}`}
+                        onMouseDown={(e) => { e.preventDefault(); selectSuggestion(s); }}
+                        onMouseEnter={() => setActiveIndex(i)}
+                      >
+                        <span className="ticker-suggestion-symbol">{s.symbol}</span>
+                        <span className="ticker-suggestion-name">{s.name}</span>
+                        {s.exchange && <span className="ticker-suggestion-exchange">{s.exchange}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
               <button className="ticker-btn" type="submit">נתח</button>
             </form>

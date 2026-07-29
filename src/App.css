@@ -429,6 +429,51 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
   box-shadow: 0 0 0 3px var(--gold-faint);
   background: var(--bg-secondary);
 }
+
+.ticker-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  z-index: 200;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.ticker-suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.9rem;
+  cursor: pointer;
+  transition: background 0.12s ease;
+  border-bottom: 1px solid var(--border);
+}
+.ticker-suggestion-item:last-child { border-bottom: none; }
+.ticker-suggestion-item:hover,
+.ticker-suggestion-item.active { background: rgba(79,140,255,0.1); }
+.ticker-suggestion-symbol {
+  font-weight: 700; color: var(--pearl); font-size: 0.85rem;
+  flex-shrink: 0;
+}
+.ticker-suggestion-name {
+  color: var(--text-secondary); font-size: 0.8rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1; min-width: 0;
+}
+.ticker-suggestion-exchange {
+  color: var(--text-secondary); font-size: 0.68rem;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.05);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+}
 .ticker-btn {
   background: var(--accent);
   color: #fff;

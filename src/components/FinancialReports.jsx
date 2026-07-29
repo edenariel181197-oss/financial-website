@@ -77,9 +77,9 @@ function IncomeTab({ data, years }) {
   const rows5 = data.slice(0, 5);
   const ttm = rows5[0];
   const revenueCAGR = calcCAGR(rows5, 'revenue');
-  const grossMarginTTM = ttm.revenue ? ttm.grossProfit / ttm.revenue : null;
-  const opMarginTTM = ttm.revenue ? ttm.operatingIncome / ttm.revenue : null;
-  const netMarginTTM = ttm.revenue ? ttm.netIncome / ttm.revenue : null;
+  const grossMarginTTM = (ttm.revenue && ttm.grossProfit != null) ? ttm.grossProfit / ttm.revenue : null;
+  const opMarginTTM = (ttm.revenue && ttm.operatingIncome != null) ? ttm.operatingIncome / ttm.revenue : null;
+  const netMarginTTM = (ttm.revenue && ttm.netIncome != null) ? ttm.netIncome / ttm.revenue : null;
 
   const row = (label, key, formatter = fmt, opts = {}) => {
     const { highlight = false } = opts;

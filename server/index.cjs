@@ -846,6 +846,29 @@ app.get('/api/profile/:ticker', async (req, res) => {
   }
 });
 
+// Ticker autocomplete — symbol/name suggestions as the user types
+app.get('/api/ticker-search/:query', async (req, res) => {
+  try {
+    const q = req.params.query.trim();
+    if (!q) return res.json([]);
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=8&newsCount=0&enableFuzzyQuery=false`;
+    const r = await fetch(url, { headers: YF_HEADERS });
+    const d = await r.json();
+    const results = (d.quotes || [])
+      .filter(item => item.symbol && (item.quoteType === 'EQUITY' || item.quoteType === 'ETF'))
+      .map(item => ({
+        symbol: item.symbol,
+        name: item.shortname || item.longname || item.symbol,
+        exchange: item.exchDisp || '',
+        type: item.typeDisp || '',
+      }));
+    res.json(results);
+  } catch (e) {
+    console.error('API ERROR /ticker-search:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Latest news
 app.get('/api/news/:ticker', async (req, res) => {
   try {
