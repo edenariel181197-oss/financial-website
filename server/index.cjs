@@ -1076,7 +1076,7 @@ app.get('/api/calc-data/:ticker', async (req, res) => {
 // Serve built frontend
 const path = require('path');
 const distPath = path.join(__dirname, '../dist');
-app.use(express.static(distPath));
+app.use(express.static(distPath, { dotfiles: 'allow' }));
 app.use((_req, res) => res.sendFile(path.join(distPath, 'index.html')));
 
 const PORT = process.env.PORT || 3001;
