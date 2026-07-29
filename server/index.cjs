@@ -464,33 +464,49 @@ app.get('/api/balance/:ticker', async (req, res) => {
       'annualCurrentLiabilities', 'annualLongTermDebt', 'annualOtherNonCurrentLiabilities',
       'annualTotalLiabilitiesNetMinorityInterest',
       'annualCommonStock', 'annualRetainedEarnings', 'annualCommonStockEquity',
+      'annualTotalEquityGrossMinorityInterest',
     ]);
     const years = getYears(map);
-    res.json(years.map(date => ({
-      date,
-      cashAndCashEquivalents: getVal(map, 'annualCashAndCashEquivalents', date),
-      shortTermInvestments: getVal(map, 'annualShortTermInvestments', date),
-      netReceivables: getVal(map, 'annualAccountsReceivable', date),
-      inventory: getVal(map, 'annualInventory', date),
-      otherCurrentAssets: getVal(map, 'annualOtherCurrentAssets', date),
-      totalCurrentAssets: getVal(map, 'annualCurrentAssets', date),
-      longTermInvestments: getVal(map, 'annualLongTermInvestments', date),
-      propertyPlantEquipmentNet: getVal(map, 'annualNetPPE', date),
-      goodwill: getVal(map, 'annualGoodwill', date),
-      intangibleAssets: getVal(map, 'annualOtherIntangibleAssets', date),
-      totalNonCurrentAssets: getVal(map, 'annualTotalNonCurrentAssets', date),
-      totalAssets: getVal(map, 'annualTotalAssets', date),
-      shortTermDebt: getVal(map, 'annualCurrentDebt', date),
-      accountPayables: getVal(map, 'annualAccountsPayable', date),
-      otherCurrentLiabilities: getVal(map, 'annualOtherCurrentLiabilities', date),
-      totalCurrentLiabilities: getVal(map, 'annualCurrentLiabilities', date),
-      longTermDebt: getVal(map, 'annualLongTermDebt', date),
-      otherNonCurrentLiabilities: getVal(map, 'annualOtherNonCurrentLiabilities', date),
-      totalLiabilities: getVal(map, 'annualTotalLiabilitiesNetMinorityInterest', date),
-      commonStock: getVal(map, 'annualCommonStock', date),
-      retainedEarnings: getVal(map, 'annualRetainedEarnings', date),
-      totalStockholdersEquity: getVal(map, 'annualCommonStockEquity', date),
-    })));
+    res.json(years.map(date => {
+      const totalAssets = getVal(map, 'annualTotalAssets', date);
+      // Use the gross-of-minority-interest total, not common-stock-only equity — companies
+      // with preferred stock or non-controlling interests (banks, TSLA) otherwise fail to
+      // balance against total assets. Falls back to common equity if Yahoo omits the gross field.
+      const totalStockholdersEquity = getVal(map, 'annualTotalEquityGrossMinorityInterest', date)
+        ?? getVal(map, 'annualCommonStockEquity', date);
+      let totalLiabilities = getVal(map, 'annualTotalLiabilitiesNetMinorityInterest', date);
+      // Yahoo's combined timeseries request occasionally drops this one field for a given
+      // year even though assets/equity are present. Assets = Liabilities + Equity is a strict
+      // accounting identity (not an estimate), so derive it rather than show a broken total.
+      if (totalLiabilities == null && totalAssets != null && totalStockholdersEquity != null) {
+        totalLiabilities = totalAssets - totalStockholdersEquity;
+      }
+      return {
+        date,
+        cashAndCashEquivalents: getVal(map, 'annualCashAndCashEquivalents', date),
+        shortTermInvestments: getVal(map, 'annualShortTermInvestments', date),
+        netReceivables: getVal(map, 'annualAccountsReceivable', date),
+        inventory: getVal(map, 'annualInventory', date),
+        otherCurrentAssets: getVal(map, 'annualOtherCurrentAssets', date),
+        totalCurrentAssets: getVal(map, 'annualCurrentAssets', date),
+        longTermInvestments: getVal(map, 'annualLongTermInvestments', date),
+        propertyPlantEquipmentNet: getVal(map, 'annualNetPPE', date),
+        goodwill: getVal(map, 'annualGoodwill', date),
+        intangibleAssets: getVal(map, 'annualOtherIntangibleAssets', date),
+        totalNonCurrentAssets: getVal(map, 'annualTotalNonCurrentAssets', date),
+        totalAssets,
+        shortTermDebt: getVal(map, 'annualCurrentDebt', date),
+        accountPayables: getVal(map, 'annualAccountsPayable', date),
+        otherCurrentLiabilities: getVal(map, 'annualOtherCurrentLiabilities', date),
+        totalCurrentLiabilities: getVal(map, 'annualCurrentLiabilities', date),
+        longTermDebt: getVal(map, 'annualLongTermDebt', date),
+        otherNonCurrentLiabilities: getVal(map, 'annualOtherNonCurrentLiabilities', date),
+        totalLiabilities,
+        commonStock: getVal(map, 'annualCommonStock', date),
+        retainedEarnings: getVal(map, 'annualRetainedEarnings', date),
+        totalStockholdersEquity,
+      };
+    }));
   } catch (e) {
     console.error('API ERROR /balance:', e.message);
     res.status(500).json({ error: e.message });
