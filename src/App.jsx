@@ -1,4 +1,8 @@
 import { useState } from 'react';
+import {
+  Calculator, LineChart, FileText, BarChart3, Building2, Newspaper,
+  ArrowLeftRight, Trophy, Diamond, Search, ChevronLeft, ChevronRight, Menu,
+} from 'lucide-react';
 import Calculator1 from './components/Calculator1';
 import Calculator2 from './components/Calculator2';
 import FinancialReports from './components/FinancialReports';
@@ -6,15 +10,19 @@ import FinancialCharts from './components/FinancialCharts';
 import StockData from './components/StockData';
 import CompanyProfile from './components/CompanyProfile';
 import StockNews from './components/StockNews';
+import Compare from './components/Compare';
+import SectorScreener from './components/SectorScreener';
 import './App.css';
 
 const NAV = [
-  { icon: '◈', label: 'מחשבון EPS',      sub: 'הערכת שווי DCF'    },
-  { icon: '◉', label: 'מחשבון הכנסות',   sub: 'תרחישי מכפיל'      },
-  { icon: '≡', label: 'דוחות כספיים',    sub: 'מאזן · רווח · תזרים' },
-  { icon: '∿', label: 'גרפים ותחזיות',   sub: 'ניתוח ויזואלי'     },
-  { icon: '🏢', label: 'אודות החברה',     sub: 'פרופיל והנהלה'     },
-  { icon: '📰', label: 'חדשות',           sub: 'עדכונים אחרונים'   },
+  { icon: Calculator,      label: 'מחשבון EPS',    sub: 'הערכת שווי DCF'       },
+  { icon: LineChart,       label: 'מחשבון הכנסות', sub: 'תרחישי מכפיל'         },
+  { icon: FileText,        label: 'דוחות כספיים',  sub: 'מאזן · רווח · תזרים'  },
+  { icon: BarChart3,       label: 'גרפים ותחזיות', sub: 'ניתוח ויזואלי'        },
+  { icon: Building2,       label: 'אודות החברה',   sub: 'פרופיל והנהלה'        },
+  { icon: Newspaper,       label: 'חדשות',         sub: 'עדכונים אחרונים'      },
+  { icon: ArrowLeftRight,  label: 'השוואת מניות',  sub: 'עד 5 מניות זו לצד זו' },
+  { icon: Trophy,          label: 'מיטב הסקטור',   sub: 'דירוג לפי מכפילים'    },
 ];
 
 export default function App() {
@@ -35,6 +43,8 @@ export default function App() {
     setMobileNavOpen(false);
   }
 
+  const ActivePageIcon = NAV[page].icon;
+
   return (
     <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''}`} dir="rtl">
 
@@ -44,9 +54,9 @@ export default function App() {
       {/* ── Sidebar ── */}
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="brand-diamond">◈</div>
+          <div className="brand-diamond"><Diamond size={18} strokeWidth={2.5} /></div>
           <div className="brand-text">
-            <h1 className="brand-name">Valuate</h1>
+            <h1 className="brand-name">Eden Finances</h1>
             <p className="brand-sub">כלי ניתוח מקצועי</p>
           </div>
         </div>
@@ -54,20 +64,22 @@ export default function App() {
         <div className="sidebar-divider" />
 
         <nav className="sidebar-nav">
-          {NAV.map((item, i) => (
-            <button
-              key={i}
-              className={`nav-item ${page === i ? 'active' : ''}`}
-              onClick={() => handleNavClick(i)}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              <div className="nav-labels">
-                <span className="nav-label">{item.label}</span>
-                <span className="nav-sub">{item.sub}</span>
-              </div>
-              {page === i && <span className="nav-pip" />}
-            </button>
-          ))}
+          {NAV.map((item, i) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={i}
+                className={`nav-item ${page === i ? 'active' : ''}`}
+                onClick={() => handleNavClick(i)}
+              >
+                <span className="nav-icon"><Icon size={18} strokeWidth={2} /></span>
+                <div className="nav-labels">
+                  <span className="nav-label">{item.label}</span>
+                  <span className="nav-sub">{item.sub}</span>
+                </div>
+              </button>
+            );
+          })}
         </nav>
 
         <div className="sidebar-footer">
@@ -83,20 +95,20 @@ export default function App() {
           <div className="topbar-top-row">
             <div className="topbar-right">
               <button className="collapse-btn desktop-only" onClick={() => setSidebarCollapsed(v => !v)}>
-                {sidebarCollapsed ? '▶' : '◀'}
+                {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
               </button>
               <button className="collapse-btn mobile-only" onClick={() => setMobileNavOpen(v => !v)}>
-                ☰
+                <Menu size={18} />
               </button>
               <div className="topbar-page-title">
-                <span className="topbar-icon">{NAV[page].icon}</span>
+                <span className="topbar-icon"><ActivePageIcon size={18} strokeWidth={2} /></span>
                 <span>{NAV[page].label}</span>
               </div>
             </div>
 
             <form className="ticker-form" onSubmit={handleSearch}>
               <div className="ticker-input-wrap">
-                <span className="ticker-search-icon">⌕</span>
+                <span className="ticker-search-icon"><Search size={15} /></span>
                 <input
                   className="ticker-input"
                   placeholder="AAPL, MSFT, TSLA..."
@@ -112,7 +124,7 @@ export default function App() {
         {/* Stock overview panel */}
         {ticker && (
           <div className="stock-panel-wrapper">
-            <StockData ticker={ticker} />
+            <StockData ticker={ticker} showInsights={page === 0} />
           </div>
         )}
 
@@ -124,6 +136,8 @@ export default function App() {
           {page === 3 && <FinancialCharts ticker={ticker} />}
           {page === 4 && <CompanyProfile ticker={ticker} />}
           {page === 5 && <StockNews ticker={ticker} />}
+          {page === 6 && <Compare />}
+          {page === 7 && <SectorScreener />}
         </main>
       </div>
     </div>

@@ -3,7 +3,11 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { getQuote, getChartData, getPriceHistory, fmtPct, fmtRaw } from '../utils/api';
+import { TrendingUp, TrendingDown, Landmark, Divide, DollarSign, Percent } from 'lucide-react';
+import { getQuote, getChartData, getPriceHistory, getProfile, fmtPct, fmtRaw } from '../utils/api';
+import KpiCard from './ui/KpiCard';
+import useCountUp from './ui/useCountUp';
+import AiInsights from './ui/AiInsights';
 
 const VIEWS = [
   { key: 'daily',   label: 'יומי'   },
@@ -24,16 +28,17 @@ function formatTime(ts, view) {
   return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' });
 }
 
-const PriceTooltip = ({ active, payload }) => {
+const PriceTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="chart-tooltip">
-      <p style={{ color: 'var(--gold-light)', fontWeight: 700 }}>${fmtRaw(payload[0].value)}</p>
+      {label && <p className="tooltip-label">{label}</p>}
+      <p style={{ color: 'var(--accent)', fontWeight: 700, fontSize: '1rem' }}>${fmtRaw(payload[0].value)}</p>
     </div>
   );
 };
 
-export default function StockData({ ticker }) {
+export default function StockData({ ticker, showInsights = true }) {
   const [quote, setQuote] = useState(null);
   const [chartData, setChartData] = useState(null);
   const [priceHistory, setPriceHistory] = useState([]);
@@ -41,6 +46,7 @@ export default function StockData({ ticker }) {
   const [chartLoading, setChartLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [thesis, setThesis] = useState(null);
 
   useEffect(() => {
     if (!ticker) return;
@@ -58,6 +64,19 @@ export default function StockData({ ticker }) {
       .then(d => { setPriceHistory(d); setChartLoading(false); })
       .catch(() => setChartLoading(false));
   }, [ticker, view]);
+
+  // Fetched independently — reuses the same rule-based thesis already computed
+  // for the Company Profile page (server/index.cjs buildThesis), just surfaced
+  // here too, right under the chart. No new business logic.
+  useEffect(() => {
+    if (!ticker) return;
+    setThesis(null);
+    getProfile(ticker)
+      .then(p => setThesis(p.thesis || null))
+      .catch(() => setThesis(null));
+  }, [ticker]);
+
+  const animatedPrice = useCountUp(quote?.price);
 
   if (loading) return <div className="data-loading">טוען נתונים עבור {ticker}...</div>;
   if (error) return <div className="data-error">{error}</div>;
@@ -108,21 +127,20 @@ export default function StockData({ ticker }) {
 
   return (
     <div className="stock-data-panel">
-      {/* Row 1: Company name + price + daily change */}
-      <div className="stock-header-row">
-        {quote.name && (
-          <div className="stock-company-name">
-            {quote.name}
-            <span className="stock-ticker-badge">{ticker}</span>
-          </div>
-        )}
+      {/* Hero: company identity → price (visual focus) → daily change */}
+      <div className="stock-hero">
+        <div className="stock-hero-identity">
+          {quote.name && <span className="stock-company-name">{quote.name}</span>}
+          <span className="stock-ticker-badge">{ticker}</span>
+        </div>
 
         {quote.price != null && (
-          <div className="stock-price-block">
-            <span className="stock-price">${fmtRaw(quote.price)}</span>
+          <div className="stock-hero-price-row">
+            <span className="stock-price">${fmtRaw(animatedPrice ?? quote.price)}</span>
             {quote.changePercent != null && (
-              <span className={`stock-change ${changePos ? 'positive' : 'negative'}`}>
-                {changePos ? '▲' : '▼'} {Math.abs(quote.changePercent).toFixed(2)}%
+              <span className={`stock-change-badge ${changePos ? 'positive' : 'negative'}`}>
+                {changePos ? <TrendingUp size={15} strokeWidth={2.5} /> : <TrendingDown size={15} strokeWidth={2.5} />}
+                {Math.abs(quote.changePercent).toFixed(2)}%
                 {quote.change != null && (
                   <span className="stock-change-abs">
                     ({changePos ? '+' : ''}{fmtRaw(quote.change)})
@@ -150,18 +168,18 @@ export default function StockData({ ticker }) {
         {chartLoading ? (
           <div className="price-chart-loading">טוען גרף...</div>
         ) : priceChartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={160}>
-            <AreaChart data={priceChartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={340}>
+            <AreaChart data={priceChartData} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={chartColor} stopOpacity={0.25} />
+                  <stop offset="5%"  stopColor={chartColor} stopOpacity={0.35} />
                   <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
               <XAxis
                 dataKey="label"
-                tick={{ fill: '#888', fontSize: 10 }}
+                tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
                 interval={yearTicks ? 0 : 'preserveStartEnd'}
                 ticks={yearTicks || undefined}
                 tickLine={false}
@@ -169,21 +187,27 @@ export default function StockData({ ticker }) {
               />
               <YAxis
                 domain={[minPrice, maxPrice]}
-                tick={{ fill: '#888', fontSize: 10 }}
+                tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
                 tickFormatter={v => `$${v.toFixed(0)}`}
                 tickLine={false}
                 axisLine={false}
-                width={52}
+                width={56}
               />
-              <Tooltip content={<PriceTooltip />} />
+              <Tooltip
+                content={<PriceTooltip />}
+                cursor={{ stroke: 'var(--accent)', strokeWidth: 1, strokeDasharray: '4 4' }}
+              />
               <Area
                 type="monotone"
                 dataKey="close"
                 stroke={chartColor}
-                strokeWidth={2}
+                strokeWidth={2.5}
                 fill="url(#priceGrad)"
                 dot={false}
-                activeDot={{ r: 4, fill: chartColor }}
+                activeDot={{ r: 5, fill: chartColor, stroke: 'var(--card)', strokeWidth: 2 }}
+                animationDuration={700}
+                animationEasing="ease-out"
+                style={{ filter: `drop-shadow(0 0 6px ${chartColor}66)` }}
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -192,22 +216,23 @@ export default function StockData({ ticker }) {
         )}
       </div>
 
+      {/* AI Insights — rule-based thesis summary, only on the main page */}
+      {showInsights && <AiInsights thesis={thesis} />}
+
       {/* Key metrics */}
       <div className="metrics-grid">
         {[
-          { label: 'שווי שוק', val: fmtMC(quote.marketCap ?? (quote.sharesOutstanding && quote.price ? quote.sharesOutstanding * quote.price : null)) },
-          { label: 'P/E', val: fmtRaw(quote.pe) },
-          { label: 'EPS (TTM)', val: `$${fmtRaw(quote.eps)}` },
-          { label: 'שולי רווח נקי', val: fmtPct(quote.netMargin) },
-        ].map(({ label, val }) => (
-          <div key={label} className="metric-card">
-            <span className="metric-label">{label}</span>
-            <span className="metric-value">{val}</span>
-          </div>
+          { label: 'שווי שוק', val: fmtMC(quote.marketCap ?? (quote.sharesOutstanding && quote.price ? quote.sharesOutstanding * quote.price : null)), icon: Landmark },
+          { label: 'P/E', val: fmtRaw(quote.pe), icon: Divide },
+          { label: 'EPS (TTM)', val: `$${fmtRaw(quote.eps)}`, icon: DollarSign },
+          { label: 'שולי רווח נקי', val: fmtPct(quote.netMargin), icon: Percent },
+        ].map(({ label, val, icon }) => (
+          <KpiCard key={label} title={label} value={val} icon={icon} />
         ))}
       </div>
 
-      {/* Quarterly growth tables */}
+      {/* Quarterly growth tables — only on the main page */}
+      {showInsights && (
       <div className="quarterly-tables">
         {revGrowth.length > 0 && (
           <div className="q-table-wrap">
@@ -244,6 +269,7 @@ export default function StockData({ ticker }) {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

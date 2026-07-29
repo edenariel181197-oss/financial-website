@@ -4,6 +4,7 @@ globalThis.fetch = fetch;
 
 const express = require('express');
 const cors = require('cors');
+const SECTORS = require('./sectors.cjs');
 
 const app = express();
 app.use(cors());
@@ -125,48 +126,270 @@ function latest(map, key) {
   return (map[key] || [])[0]?.value ?? null;
 }
 
+// ── Rule-based investment thesis (V1, free — no AI) ───────────────
+// Built entirely from data already fetched via timeseries + the sector
+// screener cache. No external calls, no cost.
+function buildThesis({ pe, revenueGrowthRaw, netMarginRaw, latestDebt, latestCash, latestFCF, latestNetIncome, history, sectorMedianPE, sectorPeerCount, sectorLabel }) {
+  const strengths = [];
+  const risks = [];
+  const context = [];
+
+  // Valuation
+  let valuation;
+  const peerNote = sectorPeerCount ? ` (בהשוואה ל-${sectorPeerCount} חברות מובילות בסקטור ${sectorLabel})` : '';
+  if (pe == null) {
+    valuation = { verdict: 'unknown', text: 'אין נתוני מכפיל רווח זמינים.' };
+  } else if (sectorMedianPE != null) {
+    if (pe < sectorMedianPE * 0.85) {
+      valuation = { verdict: 'cheap', text: `נסחרת במכפיל רווח של ${pe.toFixed(1)}, מתחת לחציון הסקטוריאלי (${sectorMedianPE.toFixed(1)})${peerNote} — מוזלת יחסית למתחרות.` };
+      strengths.push('מכפיל רווח נמוך מחציון הסקטור');
+    } else if (pe > sectorMedianPE * 1.15) {
+      valuation = { verdict: 'expensive', text: `נסחרת במכפיל רווח של ${pe.toFixed(1)}, מעל לחציון הסקטוריאלי (${sectorMedianPE.toFixed(1)})${peerNote} — יקרה יחסית למתחרות.` };
+      risks.push('מכפיל רווח גבוה מחציון הסקטור');
+    } else {
+      valuation = { verdict: 'fair', text: `נסחרת במכפיל רווח של ${pe.toFixed(1)}, קרוב לחציון הסקטוריאלי (${sectorMedianPE.toFixed(1)})${peerNote}.` };
+    }
+  } else if (pe < 15) {
+    valuation = { verdict: 'cheap', text: `מכפיל רווח נמוך (${pe.toFixed(1)}) ביחס לשוק הכללי.` };
+    strengths.push('מכפיל רווח נמוך יחסית לשוק');
+  } else if (pe > 25) {
+    valuation = { verdict: 'expensive', text: `מכפיל רווח גבוה (${pe.toFixed(1)}) ביחס לשוק הכללי.` };
+    risks.push('מכפיל רווח גבוה יחסית לשוק');
+  } else {
+    valuation = { verdict: 'fair', text: `מכפיל רווח סביר (${pe.toFixed(1)}) ביחס לשוק הכללי.` };
+  }
+
+  // Growth
+  let growth;
+  if (revenueGrowthRaw == null) {
+    growth = { verdict: 'unknown', text: 'אין נתוני צמיחת הכנסות זמינים.' };
+  } else if (revenueGrowthRaw > 15) {
+    growth = { verdict: 'strong', text: `צמיחת הכנסות שנתית חזקה של ${revenueGrowthRaw.toFixed(1)}%.` };
+    strengths.push('צמיחת הכנסות חזקה');
+  } else if (revenueGrowthRaw > 5) {
+    growth = { verdict: 'moderate', text: `צמיחת הכנסות שנתית מתונה של ${revenueGrowthRaw.toFixed(1)}%.` };
+  } else if (revenueGrowthRaw >= 0) {
+    growth = { verdict: 'weak', text: `צמיחת הכנסות איטית של ${revenueGrowthRaw.toFixed(1)}% — כדאי לעקוב.` };
+    risks.push('קצב צמיחה איטי');
+  } else {
+    growth = { verdict: 'declining', text: `הכנסות בירידה של ${Math.abs(revenueGrowthRaw).toFixed(1)}% לעומת השנה הקודמת.` };
+    risks.push('ירידה בהכנסות');
+  }
+
+  // Profitability
+  let profitability;
+  if (netMarginRaw == null) {
+    profitability = { verdict: 'unknown', text: 'אין נתוני רווחיות זמינים.' };
+  } else if (netMarginRaw < 0) {
+    profitability = { verdict: 'unprofitable', text: `החברה מפסידה כרגע (שולי רווח נקי ${(netMarginRaw * 100).toFixed(1)}%).` };
+    risks.push('החברה אינה רווחית כרגע');
+  } else if (netMarginRaw > 0.20) {
+    profitability = { verdict: 'high', text: `רווחיות גבוהה — שולי רווח נקי של ${(netMarginRaw * 100).toFixed(1)}%.` };
+    strengths.push('שולי רווח נקי גבוהים');
+  } else if (netMarginRaw > 0.10) {
+    profitability = { verdict: 'moderate', text: `רווחיות סבירה — שולי רווח נקי של ${(netMarginRaw * 100).toFixed(1)}%.` };
+  } else {
+    profitability = { verdict: 'low', text: `רווחיות נמוכה — שולי רווח נקי של ${(netMarginRaw * 100).toFixed(1)}%.` };
+    risks.push('שולי רווח נקי נמוכים');
+  }
+
+  // Financial health
+  let health;
+  if (latestDebt == null && latestCash == null) {
+    health = { verdict: 'unknown', text: 'אין נתוני מאזן זמינים.' };
+  } else if ((latestCash ?? 0) >= (latestDebt ?? 0)) {
+    health = { verdict: 'strong', text: 'עודף מזומן נטו על פני החוב — מאזן איתן.' };
+    strengths.push('עודף מזומן נטו על החוב');
+  } else if ((latestDebt ?? 0) > (latestCash ?? 0) * 3) {
+    health = { verdict: 'weak', text: 'רמת מינוף גבוהה יחסית למזומן הקיים — כדאי לעקוב.' };
+    risks.push('מינוף גבוה יחסית למזומן');
+  } else {
+    health = { verdict: 'moderate', text: 'רמת חוב סבירה ביחס למזומן הקיים.' };
+  }
+
+  // Own-history valuation context — is it cheap/expensive relative to its own past, not just peers?
+  const pastPEs = (history || []).slice(1).map(h => h.pe).filter(v => v != null);
+  if (pe != null && pastPEs.length >= 2) {
+    const avgPastPE = pastPEs.reduce((a, b) => a + b, 0) / pastPEs.length;
+    if (pe < avgPastPE * 0.9) {
+      context.push(`המכפיל הנוכחי (${pe.toFixed(1)}) נמוך מהממוצע ההיסטורי שלה ב-${pastPEs.length} השנים האחרונות (${avgPastPE.toFixed(1)}) — נסחרת בזהירות יחסית לעצמה בעבר.`);
+    } else if (pe > avgPastPE * 1.1) {
+      context.push(`המכפיל הנוכחי (${pe.toFixed(1)}) גבוה מהממוצע ההיסטורי שלה ב-${pastPEs.length} השנים האחרונות (${avgPastPE.toFixed(1)}) — נסחרת יקר יחסית לעצמה בעבר.`);
+    } else {
+      context.push(`המכפיל הנוכחי דומה לממוצע ההיסטורי שלה ב-${pastPEs.length} השנים האחרונות (${avgPastPE.toFixed(1)}).`);
+    }
+  }
+
+  // Growth trend — accelerating, decelerating, or stable (needs 3+ years of revenue)
+  if (history && history.length >= 3 && history[0].revenue != null && history[1].revenue != null && history[2].revenue != null && history[1].revenue !== 0 && history[2].revenue !== 0) {
+    const g1 = (history[0].revenue - history[1].revenue) / Math.abs(history[1].revenue) * 100;
+    const g2 = (history[1].revenue - history[2].revenue) / Math.abs(history[2].revenue) * 100;
+    if (g1 > g2 + 3) {
+      context.push(`קצב הצמיחה מאיץ — מ-${g2.toFixed(1)}% בשנה הקודמת ל-${g1.toFixed(1)}% בשנה האחרונה.`);
+    } else if (g1 < g2 - 3) {
+      context.push(`קצב הצמיחה מאט — מ-${g2.toFixed(1)}% בשנה הקודמת ל-${g1.toFixed(1)}% בשנה האחרונה.`);
+    } else {
+      context.push('קצב הצמיחה יציב יחסית בשנתיים האחרונות.');
+    }
+  }
+
+  // Earnings quality — does free cash flow actually back up the reported net income?
+  if (latestFCF != null && latestNetIncome != null && latestNetIncome > 0) {
+    const ratio = latestFCF / latestNetIncome;
+    if (ratio >= 0.9) {
+      context.push('תזרים המזומנים החופשי מכסה כמעט את מלוא הרווח הנקי — סימן לאיכות רווח גבוהה.');
+      strengths.push('תזרים מזומנים חופשי איכותי');
+    } else if (ratio >= 0.5) {
+      context.push(`תזרים המזומנים החופשי מכסה כ-${(ratio * 100).toFixed(0)}% מהרווח הנקי — סביר.`);
+    } else {
+      context.push(`תזרים המזומנים החופשי נמוך משמעותית מהרווח הנקי המדווח (כ-${(ratio * 100).toFixed(0)}%) — שווה לבדוק את איכות הרווח.`);
+      risks.push('תזרים מזומנים חלש ביחס לרווח הנקי');
+    }
+  }
+
+  const summary = [valuation.text, growth.text, profitability.text, health.text].join(' ');
+
+  return {
+    valuation, growth, profitability, health,
+    strengths: strengths.slice(0, 3),
+    risks: risks.slice(0, 3),
+    context,
+    summary,
+  };
+}
+
 // ════════════════════════════════════════════════════════════════
 //  ENDPOINTS
 // ════════════════════════════════════════════════════════════════
 
 // Quote
+async function getQuoteData(ticker) {
+  const t = ticker.toUpperCase();
+  const [chart, tsMap, summary] = await Promise.all([
+    fetchChart(t),
+    fetchTimeSeries(t, [
+      'annualDilutedEPS', 'annualNetIncomeRatio', 'annualPeRatio', 'annualTotalRevenue', 'annualNetIncome', 'annualShareIssued',
+      'annualCommonStockEquity', 'annualEBITDA', 'annualLongTermDebt', 'annualCurrentDebt', 'annualCashAndCashEquivalents',
+    ]),
+    fetchSummary(t, ['summaryDetail', 'defaultKeyStatistics', 'financialData']),
+  ]);
+
+  const sd = summary.summaryDetail || {};
+  const ks = summary.defaultKeyStatistics || {};
+  const fd = summary.financialData || {};
+
+  const tsRevenue = latest(tsMap, 'annualTotalRevenue');
+  const tsNetIncome = latest(tsMap, 'annualNetIncome');
+  const netMargin = fd.profitMargins
+    ?? latest(tsMap, 'annualNetIncomeRatio')
+    ?? (tsRevenue && tsNetIncome ? tsNetIncome / tsRevenue : null);
+
+  const sharesOutstanding = ks.sharesOutstanding ?? chart.sharesOutstanding ?? latest(tsMap, 'annualShareIssued');
+  const price = chart.price;
+  const marketCap = chart.marketCap ?? (sharesOutstanding && price ? sharesOutstanding * price : null);
+
+  // quoteSummary (defaultKeyStatistics) is unreliable/frequently blocked — fall back to
+  // computing P/B and EV/EBITDA from the more reliable timeseries fundamentals, same
+  // reasoning as the existing timeseries-over-quoteSummary preference used elsewhere.
+  const equity = latest(tsMap, 'annualCommonStockEquity');
+  const bookValuePerShare = (equity && sharesOutstanding) ? equity / sharesOutstanding : null;
+  const pb = ks.priceToBook ?? (price && bookValuePerShare ? price / bookValuePerShare : null);
+
+  const ebitda = latest(tsMap, 'annualEBITDA');
+  const ltd = latest(tsMap, 'annualLongTermDebt');
+  const std = latest(tsMap, 'annualCurrentDebt');
+  const cash = latest(tsMap, 'annualCashAndCashEquivalents');
+  const enterpriseValue = marketCap != null ? marketCap + (ltd ?? 0) + (std ?? 0) - (cash ?? 0) : null;
+  const evToEbitda = ks.enterpriseToEbitda ?? (enterpriseValue && ebitda ? enterpriseValue / ebitda : null);
+
+  return {
+    symbol: t,
+    name: chart.name,
+    price,
+    change: chart.change,
+    changePercent: chart.changePercent,
+    pe: sd.trailingPE ?? latest(tsMap, 'annualPeRatio'),
+    pb,
+    evToEbitda,
+    eps: ks.trailingEps ?? latest(tsMap, 'annualDilutedEPS'),
+    netMargin,
+    marketCap,
+    sharesOutstanding,
+  };
+}
+
 app.get('/api/quote/:ticker', async (req, res) => {
   try {
-    const t = req.params.ticker.toUpperCase();
-    const [chart, tsMap, summary] = await Promise.all([
-      fetchChart(t),
-      fetchTimeSeries(t, ['annualDilutedEPS', 'annualNetIncomeRatio', 'annualPeRatio', 'annualTotalRevenue', 'annualNetIncome', 'annualShareIssued']),
-      fetchSummary(t, ['summaryDetail', 'defaultKeyStatistics', 'financialData']),
-    ]);
-
-    const sd = summary.summaryDetail || {};
-    const ks = summary.defaultKeyStatistics || {};
-    const fd = summary.financialData || {};
-
-    const tsRevenue = latest(tsMap, 'annualTotalRevenue');
-    const tsNetIncome = latest(tsMap, 'annualNetIncome');
-    const netMargin = fd.profitMargins
-      ?? latest(tsMap, 'annualNetIncomeRatio')
-      ?? (tsRevenue && tsNetIncome ? tsNetIncome / tsRevenue : null);
-
-    const sharesOutstanding = ks.sharesOutstanding ?? chart.sharesOutstanding ?? latest(tsMap, 'annualShareIssued');
-    const price = chart.price;
-    const marketCap = chart.marketCap ?? (sharesOutstanding && price ? sharesOutstanding * price : null);
-
-    res.json({
-      symbol: t,
-      name: chart.name,
-      price,
-      change: chart.change,
-      changePercent: chart.changePercent,
-      pe: sd.trailingPE ?? latest(tsMap, 'annualPeRatio'),
-      eps: ks.trailingEps ?? latest(tsMap, 'annualDilutedEPS'),
-      netMargin,
-      marketCap,
-      sharesOutstanding,
-    });
+    const data = await getQuoteData(req.params.ticker);
+    res.json(data);
   } catch (e) {
     console.error('API ERROR /quote:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Sector screener — ranks a curated ticker universe per sector by P/E (ascending = cheaper).
+// No DB/scheduler available on the free tier, so this uses a simple in-memory cache
+// refreshed lazily (max once per 6h) instead of a real scheduled job. Tickers are fetched
+// in small batches with a short delay between them to avoid tripping Yahoo's rate limits.
+const screenerCache = {};
+const SCREENER_TTL_MS = 6 * 60 * 60 * 1000;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function computeSectorScreener(sectorKey) {
+  const sector = SECTORS[sectorKey];
+  const results = [];
+  const batchSize = 5;
+  for (let i = 0; i < sector.tickers.length; i += batchSize) {
+    const batch = sector.tickers.slice(i, i + batchSize);
+    const batchResults = await Promise.all(
+      batch.map((t) => getQuoteData(t).catch((e) => {
+        console.error(`sector screener: failed to fetch ${t}:`, e.message);
+        return null;
+      }))
+    );
+    results.push(...batchResults.filter(Boolean));
+    if (i + batchSize < sector.tickers.length) await sleep(300);
+  }
+  const sortKey = sector.sortBy || 'marketCap';
+  results.sort((a, b) => {
+    if (a[sortKey] == null) return 1;
+    if (b[sortKey] == null) return -1;
+    return b[sortKey] - a[sortKey];
+  });
+  return results;
+}
+
+// Only reads an already-warm screener cache — never triggers a fresh fetch,
+// so it can't slow down /api/profile. Falls back to null (fixed bands) if cold.
+function getSectorPeerStats(ticker) {
+  const t = ticker.toUpperCase();
+  const key = Object.keys(SECTORS).find((k) => SECTORS[k].tickers.includes(t));
+  if (!key) return null;
+  const cached = screenerCache[key];
+  if (!cached) return null;
+  const pes = cached.data.map((c) => c.pe).filter((v) => v != null).sort((a, b) => a - b);
+  if (!pes.length) return null;
+  const mid = Math.floor(pes.length / 2);
+  const median = pes.length % 2 === 0 ? (pes[mid - 1] + pes[mid]) / 2 : pes[mid];
+  return { median, count: cached.data.length, label: SECTORS[key].label };
+}
+
+app.get('/api/sector-screener/:sector', async (req, res) => {
+  try {
+    const key = req.params.sector.toLowerCase();
+    if (!SECTORS[key]) {
+      return res.status(404).json({ error: 'Unknown sector', sectors: Object.keys(SECTORS) });
+    }
+    const cached = screenerCache[key];
+    if (cached && Date.now() - cached.fetchedAt < SCREENER_TTL_MS) {
+      return res.json({ sector: key, label: SECTORS[key].label, companies: cached.data, cached: true, fetchedAt: cached.fetchedAt });
+    }
+    const data = await computeSectorScreener(key);
+    screenerCache[key] = { data, fetchedAt: Date.now() };
+    res.json({ sector: key, label: SECTORS[key].label, companies: data, cached: false, fetchedAt: screenerCache[key].fetchedAt });
+  } catch (e) {
+    console.error('API ERROR /sector-screener:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -397,8 +620,13 @@ app.get('/api/charts/:ticker', async (req, res) => {
         'annualTotalRevenue', 'annualNetIncome', 'annualPeRatio',
         'annualTotalAssets', 'annualTotalLiabilitiesNetMinorityInterest',
         'annualChangesInCash', 'annualDilutedEPS',
+        'annualOperatingCashFlow', 'annualInvestingCashFlow', 'annualFinancingCashFlow',
       ]),
-      fetchTimeSeries(t, ['quarterlyTotalRevenue', 'quarterlyNetIncome', 'quarterlyDilutedEPS']),
+      fetchTimeSeries(t, [
+        'quarterlyTotalRevenue', 'quarterlyNetIncome', 'quarterlyDilutedEPS', 'quarterlyPeRatio',
+        'quarterlyTotalAssets', 'quarterlyTotalLiabilitiesNetMinorityInterest', 'quarterlyChangesInCash',
+        'quarterlyOperatingCashFlow', 'quarterlyInvestingCashFlow', 'quarterlyFinancingCashFlow',
+      ]),
     ]);
 
     const annualYears = getYears(annualMap);
@@ -411,6 +639,9 @@ app.get('/api/charts/:ticker', async (req, res) => {
       cashChange: getVal(annualMap, 'annualChangesInCash', date),
       pe: getVal(annualMap, 'annualPeRatio', date),
       eps: getVal(annualMap, 'annualDilutedEPS', date),
+      operatingCashFlow: getVal(annualMap, 'annualOperatingCashFlow', date),
+      investingCashFlow: getVal(annualMap, 'annualInvestingCashFlow', date),
+      financingCashFlow: getVal(annualMap, 'annualFinancingCashFlow', date),
     })).reverse();
 
     // Compute YoY growth for annual data
@@ -429,6 +660,13 @@ app.get('/api/charts/:ticker', async (req, res) => {
       revenue: getVal(quarterlyMap, 'quarterlyTotalRevenue', date),
       netIncome: getVal(quarterlyMap, 'quarterlyNetIncome', date),
       eps: getVal(quarterlyMap, 'quarterlyDilutedEPS', date),
+      totalAssets: getVal(quarterlyMap, 'quarterlyTotalAssets', date),
+      totalLiabilities: getVal(quarterlyMap, 'quarterlyTotalLiabilitiesNetMinorityInterest', date),
+      cashChange: getVal(quarterlyMap, 'quarterlyChangesInCash', date),
+      pe: getVal(quarterlyMap, 'quarterlyPeRatio', date),
+      operatingCashFlow: getVal(quarterlyMap, 'quarterlyOperatingCashFlow', date),
+      investingCashFlow: getVal(quarterlyMap, 'quarterlyInvestingCashFlow', date),
+      financingCashFlow: getVal(quarterlyMap, 'quarterlyFinancingCashFlow', date),
     }));
 
     // Compute quarterly YoY growth (same quarter last year = index i-4)
@@ -505,6 +743,7 @@ app.get('/api/profile/:ticker', async (req, res) => {
         'annualGrossProfitRatio', 'annualPeRatio', 'annualDilutedEPS',
         'annualFreeCashFlow', 'annualTotalDebt', 'annualCashAndCashEquivalents',
         'annualShareIssued', 'annualReturnOnEquity',
+        'annualCommonStockEquity', 'annualEBITDA',
       ]).catch(() => ({})),
       fetchFMPProfile(t).catch(() => ({})),
     ]);
@@ -525,10 +764,18 @@ app.get('/api/profile/:ticker', async (req, res) => {
                           ?? (latestRevenue && latestNetIncome ? latestNetIncome / latestRevenue : null);
     const grossMarginRaw   = latest(tsMap, 'annualGrossProfitRatio');
     const roeRaw           = latest(tsMap, 'annualReturnOnEquity');
+    const equity           = latest(tsMap, 'annualCommonStockEquity');
+    const ebitda           = latest(tsMap, 'annualEBITDA');
+    const sharesOut        = latest(tsMap, 'annualShareIssued');
 
-    const revenueGrowth = (latestRevenue && prevRevenue && prevRevenue !== 0)
-      ? ((latestRevenue - prevRevenue) / Math.abs(prevRevenue) * 100).toFixed(1) + '%'
+    const revenueGrowthRaw = (latestRevenue && prevRevenue && prevRevenue !== 0)
+      ? (latestRevenue - prevRevenue) / Math.abs(prevRevenue) * 100
       : null;
+    const revenueGrowth = revenueGrowthRaw != null ? revenueGrowthRaw.toFixed(1) + '%' : null;
+
+    const marketCap = (chart.price && sharesOut) ? chart.price * sharesOut : null;
+    const pb = (chart.price && equity && sharesOut) ? chart.price / (equity / sharesOut) : null;
+    const evToEbitda = (marketCap && ebitda) ? (marketCap + (latestDebt ?? 0) - (latestCash ?? 0)) / ebitda : null;
 
     // 5-year financial history
     const years = getYears(tsMap);
@@ -539,6 +786,21 @@ app.get('/api/profile/:ticker', async (req, res) => {
       eps:       getVal(tsMap, 'annualDilutedEPS', date),
       pe:        getVal(tsMap, 'annualPeRatio', date),
     }));
+
+    const sectorPeers = getSectorPeerStats(t);
+    const thesis = buildThesis({
+      pe: latestPE,
+      revenueGrowthRaw,
+      netMarginRaw,
+      latestDebt,
+      latestCash,
+      latestFCF,
+      latestNetIncome,
+      history,
+      sectorMedianPE: sectorPeers?.median ?? null,
+      sectorPeerCount: sectorPeers?.count ?? null,
+      sectorLabel: sectorPeers?.label ?? null,
+    });
 
     const fmtB = v => {
       if (v == null) return null;
@@ -563,6 +825,8 @@ app.get('/api/profile/:ticker', async (req, res) => {
       ceo:       fmp.ceo       || null,
       // Always available (from timeseries)
       peTrailing:      latestPE != null ? latestPE.toFixed(1) : null,
+      pb:              pb != null ? pb.toFixed(1) : null,
+      evToEbitda:      evToEbitda != null ? evToEbitda.toFixed(1) : null,
       netMargins:      fmtPct(netMarginRaw),
       grossMargins:    fmtPct(grossMarginRaw),
       roe:             fmtPct(roeRaw),
@@ -574,6 +838,7 @@ app.get('/api/profile/:ticker', async (req, res) => {
       latestCash:      fmtB(latestCash),
       latestFCF:       fmtB(latestFCF),
       history,
+      thesis,
     });
   } catch (e) {
     console.error('API ERROR /profile:', e.message);

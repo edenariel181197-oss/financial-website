@@ -1,19 +1,12 @@
 import { useState, useEffect } from 'react';
+import { Calculator as CalculatorIcon } from 'lucide-react';
 import { getCalcData } from '../utils/api';
+import Tooltip from './ui/Tooltip';
+import SectionHeader from './ui/SectionHeader';
 
 function fmtNum(n, d = 2) {
   if (n == null || isNaN(n)) return '—';
   return Number(n).toFixed(d);
-}
-
-function Tooltip({ text }) {
-  const [vis, setVis] = useState(false);
-  return (
-    <span className="tooltip-wrap" onMouseEnter={() => setVis(true)} onMouseLeave={() => setVis(false)}>
-      <span className="tooltip-icon">?</span>
-      {vis && <span className="tooltip-box">{text}</span>}
-    </span>
-  );
 }
 
 export default function Calculator1({ ticker }) {
@@ -82,17 +75,19 @@ export default function Calculator1({ ticker }) {
     }
   }
 
+  const headerDesc = !ticker
+    ? 'הכנס טיקר חברה בראש הדף כדי לטעון נתונים אוטומטית'
+    : loading
+      ? `טוען נתונים עבור ${ticker}...`
+      : 'הערכת שווי מבוססת רווח למניה עתידי (DCF)';
+
   return (
     <div className="calc-luxury">
-      <div className="calc-lux-header">
-        <h2>♦ מחשבון הערכת שווי — EPS</h2>
-        {!ticker && <p className="lux-hint">הכנס טיקר חברה בראש הדף כדי לטעון נתונים אוטומטית</p>}
-        {loading && <p className="lux-hint">טוען נתונים עבור {ticker}...</p>}
-      </div>
+      <SectionHeader title="מחשבון הערכת שווי — EPS" description={headerDesc} icon={CalculatorIcon} />
 
       {/* Inputs */}
       <div className="lux-section">
-        <h3 className="lux-section-title">♦ הנחות חישוב</h3>
+        <h3 className="lux-section-title">הנחות חישוב</h3>
         <div className="lux-inputs-grid">
           <div className="lux-input-item">
             <label>
@@ -217,7 +212,7 @@ export default function Calculator1({ ticker }) {
 
       {/* EPS Table — Historical + Projected */}
       <div className="lux-section" style={{ marginTop: '1.5rem' }}>
-        <h3 className="lux-section-title">♦ רווח למניה (EPS) — היסטוריה ותחזית</h3>
+        <h3 className="lux-section-title">רווח למניה (EPS) — היסטוריה ותחזית</h3>
         <div className="eps-table-wrap">
           <table className="lux-table eps-table">
             <thead>
@@ -251,7 +246,7 @@ export default function Calculator1({ ticker }) {
 
       {/* Revenue Table — Historical + Projected */}
       <div className="lux-section" style={{ marginTop: '1.5rem' }}>
-        <h3 className="lux-section-title">♦ הכנסות — היסטוריה ותחזית</h3>
+        <h3 className="lux-section-title">הכנסות — היסטוריה ותחזית</h3>
         <div className="eps-table-wrap">
           <table className="lux-table eps-table">
             <thead>

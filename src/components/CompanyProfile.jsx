@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react';
 import { getProfile } from '../utils/api';
+import KpiCard from './ui/KpiCard';
+import Badge from './ui/Badge';
+
+const TONE_TO_BADGE = { good: 'positive', bad: 'negative', neutral: 'neutral' };
 
 const REC_LABEL = {
-  'strong_buy':  { label: 'קנייה חזקה', cls: 'rec-strong-buy' },
-  'buy':         { label: 'קנייה',       cls: 'rec-buy'        },
-  'hold':        { label: 'החזקה',       cls: 'rec-hold'       },
-  'underperform':{ label: 'חלש',         cls: 'rec-sell'       },
-  'sell':        { label: 'מכירה',       cls: 'rec-sell'       },
+  'strong_buy':  { label: 'קנייה חזקה', tone: 'positive' },
+  'buy':         { label: 'קנייה',       tone: 'positive' },
+  'hold':        { label: 'החזקה',       tone: 'warn'     },
+  'underperform':{ label: 'חלש',         tone: 'negative' },
+  'sell':        { label: 'מכירה',       tone: 'negative' },
 };
 
 function fmtNum(v, decimals = 1) {
@@ -67,6 +71,27 @@ export default function CompanyProfile({ ticker }) {
   const history = profile.history || [];
   const ceo = profile.ceo;
   const otherOfficers = (profile.officers || []).filter(o => o !== ceo).slice(0, 7);
+  const thesis = profile.thesis;
+
+  const GOOD_VERDICTS = new Set(['cheap', 'strong', 'high']);
+  const BAD_VERDICTS = new Set(['expensive', 'weak', 'declining', 'low', 'unprofitable']);
+  const toneOf = (verdict) => GOOD_VERDICTS.has(verdict) ? 'good' : BAD_VERDICTS.has(verdict) ? 'bad' : 'neutral';
+
+  const THESIS_CHIPS = thesis ? [
+    { label: 'שווי', verdict: thesis.valuation.verdict },
+    { label: 'צמיחה', verdict: thesis.growth.verdict },
+    { label: 'רווחיות', verdict: thesis.profitability.verdict },
+    { label: 'מאזן', verdict: thesis.health.verdict },
+  ] : [];
+  const overallTone = (() => {
+    if (!THESIS_CHIPS.length) return 'neutral';
+    const tones = THESIS_CHIPS.map(c => toneOf(c.verdict));
+    const good = tones.filter(t => t === 'good').length;
+    const bad = tones.filter(t => t === 'bad').length;
+    if (good > bad) return 'good';
+    if (bad > good) return 'bad';
+    return 'neutral';
+  })();
 
   return (
     <div className="profile-container">
@@ -74,7 +99,7 @@ export default function CompanyProfile({ ticker }) {
       {/* Header */}
       <div className="profile-header">
         <h2 className="profile-company-name">{profile.name || ticker}</h2>
-        {rec && <span className={`profile-rec-badge ${rec.cls}`}>{rec.label}</span>}
+        {rec && <Badge tone={rec.tone}>{rec.label}</Badge>}
         {profile.website && (
           <a href={profile.website} target="_blank" rel="noopener noreferrer" className="profile-website-link">
             ↗ {profile.website.replace(/^https?:\/\//, '')}
@@ -86,10 +111,7 @@ export default function CompanyProfile({ ticker }) {
       {basicStats.length > 0 && (
         <div className="profile-stats-grid">
           {basicStats.map(s => (
-            <div key={s.label} className="profile-stat-card">
-              <span className="profile-stat-label">{s.label}</span>
-              <span className="profile-stat-val">{s.val}</span>
-            </div>
+            <KpiCard key={s.label} title={s.label} value={s.val} />
           ))}
         </div>
       )}
@@ -97,22 +119,56 @@ export default function CompanyProfile({ ticker }) {
       {/* Financial highlights — always available from timeseries */}
       {finStats.length > 0 && (
         <div className="profile-section">
-          <h3 className="profile-section-title">♦ מדדים פיננסיים</h3>
+          <h3 className="profile-section-title">מדדים פיננסיים</h3>
           <div className="profile-fin-grid">
             {finStats.map(s => (
-              <div key={s.label} className="profile-fin-card">
-                <span className="profile-fin-label">{s.label}</span>
-                <span className="profile-fin-val">{s.val}</span>
-              </div>
+              <KpiCard key={s.label} title={s.label} value={s.val} />
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Investment thesis — rule-based, always available (no FMP dependency) */}
+      {thesis && (
+        <div className="profile-section">
+          <h3 className="profile-section-title">תזה השקעה</h3>
+          <div className="thesis-chips">
+            {THESIS_CHIPS.map(c => (
+              <Badge key={c.label} tone={TONE_TO_BADGE[toneOf(c.verdict)]}>{c.label}</Badge>
+            ))}
+          </div>
+          <div className={`lux-verdict verdict-${overallTone === 'good' ? 'buy' : overallTone === 'bad' ? 'wait' : 'neutral'}`}>
+            {thesis.summary}
+          </div>
+          {thesis.context && thesis.context.length > 0 && (
+            <div className="thesis-context">
+              <h4>רקע נוסף</h4>
+              <ul>{thesis.context.map((c, i) => <li key={i}>{c}</li>)}</ul>
+            </div>
+          )}
+          {(thesis.strengths.length > 0 || thesis.risks.length > 0) && (
+            <div className="thesis-lists">
+              {thesis.strengths.length > 0 && (
+                <div className="thesis-list thesis-list-good">
+                  <h4>חוזקות</h4>
+                  <ul>{thesis.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                </div>
+              )}
+              {thesis.risks.length > 0 && (
+                <div className="thesis-list thesis-list-bad">
+                  <h4>נקודות לתשומת לב</h4>
+                  <ul>{thesis.risks.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
       {/* 5-year history table — always available from timeseries */}
       {history.length > 0 && (
         <div className="profile-section">
-          <h3 className="profile-section-title">♦ היסטוריה פיננסית (5 שנים)</h3>
+          <h3 className="profile-section-title">היסטוריה פיננסית (5 שנים)</h3>
           <div className="profile-history-wrap">
             <table className="profile-history-table">
               <thead>
@@ -143,7 +199,7 @@ export default function CompanyProfile({ ticker }) {
       {/* Company description (bonus — from quoteSummary) */}
       {summary && (
         <div className="profile-section">
-          <h3 className="profile-section-title">♦ אודות החברה</h3>
+          <h3 className="profile-section-title">אודות החברה</h3>
           <p className="profile-description">{expanded ? summary : shortSummary}</p>
           {summary.length > 600 && (
             <button className="profile-expand-btn" onClick={() => setExpanded(v => !v)}>
@@ -156,7 +212,7 @@ export default function CompanyProfile({ ticker }) {
       {/* CEO card (bonus — from quoteSummary) */}
       {ceo && (
         <div className="profile-section">
-          <h3 className="profile-section-title">♦ מנכ&quot;ל</h3>
+          <h3 className="profile-section-title">מנכ&quot;ל</h3>
           <div className="profile-ceo-card">
             <div className="profile-ceo-name">{ceo.name}</div>
             <div className="profile-ceo-title">{ceo.title}</div>
@@ -171,7 +227,7 @@ export default function CompanyProfile({ ticker }) {
       {/* Other officers (bonus — from quoteSummary) */}
       {otherOfficers.length > 0 && (
         <div className="profile-section">
-          <h3 className="profile-section-title">♦ הנהלה בכירה</h3>
+          <h3 className="profile-section-title">הנהלה בכירה</h3>
           <div className="officers-grid">
             {otherOfficers.map((o, i) => (
               <div key={i} className="officer-card">

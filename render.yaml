@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: valuate
+    name: eden-finances
     env: node
     buildCommand: npm install && npm run build
     startCommand: node server/index.cjs

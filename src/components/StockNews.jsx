@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { Newspaper } from 'lucide-react';
 import { getNews } from '../utils/api';
+import SectionHeader from './ui/SectionHeader';
 
 function timeAgo(ts) {
   const diff = Math.floor((Date.now() / 1000) - ts);
@@ -30,7 +32,7 @@ export default function StockNews({ ticker }) {
 
   return (
     <div className="news-container">
-      <h3 className="news-header">♦ חדשות אחרונות — {ticker}</h3>
+      <SectionHeader title={`חדשות אחרונות — ${ticker}`} icon={Newspaper} />
       <div className="news-list">
         {news.map((item, i) => (
           <a

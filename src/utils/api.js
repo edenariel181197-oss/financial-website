@@ -66,6 +66,11 @@ export async function getNews(ticker) {
   return data;
 }
 
+export async function getSectorScreener(sector) {
+  const { data } = await axios.get(`${BASE}/sector-screener/${sector}`);
+  return data;
+}
+
 export function fmt(num, decimals = 2) {
   if (num == null || isNaN(num)) return '—';
   if (Math.abs(num) >= 1e9) return (num / 1e9).toFixed(1) + 'B';
