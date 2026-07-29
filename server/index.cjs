@@ -901,18 +901,38 @@ app.get('/api/price-history/:ticker', async (req, res) => {
     const result = d.chart?.result?.[0];
     if (!result) return res.json([]);
     const timestamps = result.timestamp || [];
-    const closes = result.indicators?.quote?.[0]?.close || [];
+    const quote = result.indicators?.quote?.[0] || {};
+    const opens = quote.open || [];
+    const highs = quote.high || [];
+    const lows = quote.low || [];
+    const closes = quote.close || [];
+    const volumes = quote.volume || [];
+    const round = (v) => v != null ? +v.toFixed(2) : null;
     let data = timestamps.map((ts, i) => ({
       time: ts,
-      close: closes[i] != null ? +closes[i].toFixed(2) : null,
-    })).filter(d => d.close != null);
+      open: round(opens[i]),
+      high: round(highs[i]),
+      low: round(lows[i]),
+      close: round(closes[i]),
+      volume: volumes[i] ?? null,
+    })).filter(d => d.close != null && d.open != null && d.high != null && d.low != null);
 
-    // For yearly view: aggregate full history to one point per year (last close of each year)
+    // For yearly view: roll up the monthly candles into one candle per year
+    // (open = first month's open, close = last month's close, high/low = extremes, volume = sum)
     if (view === 'yearly') {
       const byYear = {};
       data.forEach(p => {
         const yr = new Date(p.time * 1000).getFullYear();
-        byYear[yr] = p; // last point in each year wins
+        if (!byYear[yr]) {
+          byYear[yr] = { time: p.time, open: p.open, high: p.high, low: p.low, close: p.close, volume: p.volume ?? 0 };
+        } else {
+          const y = byYear[yr];
+          y.time = p.time; // keep latest timestamp in the year
+          y.high = Math.max(y.high, p.high);
+          y.low = Math.min(y.low, p.low);
+          y.close = p.close;
+          y.volume = (y.volume ?? 0) + (p.volume ?? 0);
+        }
       });
       data = Object.values(byYear);
     }

@@ -76,6 +76,10 @@
 }
 
 /* ── Fonts ── */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
 body {
   background: var(--navy);
   color: var(--pearl);
@@ -335,6 +339,7 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
 /* ── MAIN WRAPPER ── */
 .main-wrapper {
   flex: 1;
+  min-width: 0;
   margin-right: var(--sidebar-w);
   display: flex;
   flex-direction: column;
@@ -537,6 +542,10 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
   display: flex; gap: 0.85rem; flex-wrap: wrap; margin-bottom: 1.25rem;
 }
 .metrics-grid .ui-kpi-card { min-width: 160px; flex: 1; }
+.sector-kpi-bar {
+  display: flex; gap: 0.85rem; flex-wrap: wrap; margin-bottom: 1.25rem;
+}
+.sector-kpi-bar .ui-kpi-card { min-width: 180px; flex: 1; }
 .quarterly-tables { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .q-table-wrap h4 {
   font-size: 0.72rem; color: var(--slate); margin-bottom: 0.5rem;
@@ -547,6 +556,7 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
   padding: 0.6rem 0.85rem; text-align: right;
   border-bottom: 1px solid transparent;
 }
+.q-table td { font-variant-numeric: tabular-nums; }
 .q-table th { color: var(--text-secondary); font-weight: 600; font-size: 0.7rem; background: rgba(255,255,255,0.02); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
 .q-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.015); }
 .q-table tbody tr:hover { background: rgba(79,140,255,0.045); }
@@ -641,6 +651,7 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
   padding: 1rem 1.25rem; border-bottom: 1px solid transparent;
   color: var(--text); text-align: right;
   transition: background 0.15s ease;
+  font-variant-numeric: tabular-nums;
 }
 .lux-table tbody tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
 .lux-table tbody tr:hover td { background: rgba(79,140,255,0.045); }
@@ -648,10 +659,10 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
 .lux-table .row-lbl {
   color: var(--text-secondary); font-weight: 500; font-size: 0.78rem;
 }
-.pos-val { color: var(--positive); font-weight: 700; }
-.neg-val { color: var(--negative); font-weight: 700; }
+.pos-val { color: var(--positive); font-weight: 700; font-variant-numeric: tabular-nums; }
+.neg-val { color: var(--negative); font-weight: 700; font-variant-numeric: tabular-nums; }
 .proj-year { color: rgba(79,140,255,0.65); font-style: italic; }
-.proj-val { color: var(--gold-light); font-weight: 600; font-style: italic; }
+.proj-val { color: var(--gold-light); font-weight: 600; font-style: italic; font-variant-numeric: tabular-nums; }
 
 /* Input grid (Calculator1) */
 .lux-inputs-grid {
@@ -682,6 +693,41 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
   font-size: 1rem; font-weight: 700; color: var(--pearl); padding: 0.5rem 0;
 }
 .lux-hint-inline { font-size: 0.72rem; color: var(--text-secondary); font-weight: 600; }
+
+.lux-slider-row {
+  display: flex; align-items: center; gap: 0.5rem; margin-top: 0.15rem;
+}
+.lux-slider-bound {
+  font-size: 0.62rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.lux-slider {
+  flex: 1; -webkit-appearance: none; appearance: none;
+  height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,0.08);
+  outline: none; cursor: pointer;
+}
+.lux-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--card);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.lux-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.lux-slider::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--card);
+  cursor: pointer;
+}
+.lux-slider::-moz-range-track { background: rgba(255,255,255,0.08); height: 4px; border-radius: 2px; }
+
+.calc-kpi-strip, .calc-dcf-summary {
+  display: flex; gap: 0.85rem; flex-wrap: wrap; margin-bottom: 1.25rem;
+}
+.calc-kpi-strip .ui-kpi-card { min-width: 160px; flex: 1; }
+.calc-dcf-summary .ui-kpi-card { min-width: 200px; flex: 1; }
 
 /* Calculate button */
 .lux-btn {
@@ -732,6 +778,7 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
 }
 .lux-result-item strong {
   font-size: 1.15rem; font-weight: 700; color: var(--pearl);
+  font-variant-numeric: tabular-nums;
 }
 .lux-result-item.highlight {
   background: rgba(79,140,255,0.08);
@@ -744,6 +791,7 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
 
 /* Verdict */
 .lux-verdict {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;
   padding: 0.9rem 1.1rem; border-radius: var(--radius-sm);
   font-weight: 600; font-size: 0.88rem; margin-top: 0.85rem;
 }
@@ -958,6 +1006,14 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
 .financial-table tr.margin-row td {
   background: rgba(255,255,255,0.02); font-style: italic; color: var(--text-secondary);
 }
+.financial-table tr.subtotal-row td {
+  background: rgba(79,140,255,0.05); font-weight: 700; color: var(--pearl);
+}
+.margin-pill { font-variant-numeric: tabular-nums; }
+.income-kpi-strip {
+  display: flex; gap: 0.85rem; flex-wrap: wrap; margin-bottom: 1.25rem;
+}
+.income-kpi-strip .ui-kpi-card { min-width: 160px; flex: 1; }
 .table-note { font-size: 0.68rem; color: var(--slate); margin-top: 0.85rem; }
 .no-data { color: var(--slate); text-align: center; padding: 2rem; }
 .no-ticker { color: var(--slate); text-align: center; padding: 4rem; font-size: 1rem; }
@@ -1111,7 +1167,7 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
   font-weight: 600; font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase;
   border-bottom: 1px solid var(--border);
 }
-.estimates-table td { padding: 0.75rem 1rem; border-bottom: 1px solid transparent; }
+.estimates-table td { padding: 0.75rem 1rem; border-bottom: 1px solid transparent; font-variant-numeric: tabular-nums; }
 .estimates-table tbody tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
 .estimates-table td.accent { color: var(--text); font-weight: 700; }
 
@@ -1213,7 +1269,11 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
   .reports-container { padding: 1.25rem 1rem; }
 
   /* Metric cards — wrap nicely */
-  .metrics-grid .ui-kpi-card { min-width: 100px; }
+  .metrics-grid .ui-kpi-card,
+  .sector-kpi-bar .ui-kpi-card,
+  .calc-kpi-strip .ui-kpi-card,
+  .calc-dcf-summary .ui-kpi-card,
+  .income-kpi-strip .ui-kpi-card { min-width: 130px; }
 
   /* Tables — already have overflow-x: auto */
   .financial-table { min-width: 500px; }
@@ -1352,7 +1412,7 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
   box-shadow: 0 2px 10px var(--accent-glow);
 }
 .price-chart-loading {
-  height: 340px;
+  height: 380px;
   display: flex;
   align-items: center;
   justify-content: center;

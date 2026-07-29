@@ -1,10 +1,22 @@
 import { useState, useEffect } from 'react';
-import { FileText } from 'lucide-react';
+import { FileText, TrendingUp, Percent } from 'lucide-react';
 import { getIncomeStatement, getBalanceSheet, getCashFlow, getRatios, fmt, fmtPct, fmtRaw } from '../utils/api';
 import SectionHeader from './ui/SectionHeader';
 import SegmentedToggle from './ui/SegmentedToggle';
+import KpiCard from './ui/KpiCard';
+import Badge from './ui/Badge';
 
 const TABS = ['דוח רווח והפסד', 'דוח מאזן', 'תזרים מזומנים', 'יחסים פיננסיים'];
+
+// rows[0] is the newest year (server sorts descending) — CAGR spans rows[0]..rows[last].
+function calcCAGR(rows, key) {
+  if (!rows?.length || rows.length < 2) return null;
+  const newest = rows[0]?.[key];
+  const oldest = rows[rows.length - 1]?.[key];
+  if (newest == null || oldest == null || oldest <= 0) return null;
+  const years = rows.length - 1;
+  return Math.pow(newest / oldest, 1 / years) - 1;
+}
 
 export default function FinancialReports({ ticker }) {
   const [activeTab, setActiveTab] = useState(0);
@@ -62,28 +74,50 @@ export default function FinancialReports({ ticker }) {
 function IncomeTab({ data, years }) {
   if (!data?.length) return <div className="no-data">אין נתונים</div>;
 
-  const row = (label, key, formatter = fmt) => (
-    <tr key={label}>
-      <td className="row-label">{label}</td>
-      {data.slice(0, 5).map((d, i) => (
-        <td key={i} className="number">{formatter(d[key])}</td>
-      ))}
-    </tr>
-  );
+  const rows5 = data.slice(0, 5);
+  const ttm = rows5[0];
+  const revenueCAGR = calcCAGR(rows5, 'revenue');
+  const grossMarginTTM = ttm.revenue ? ttm.grossProfit / ttm.revenue : null;
+  const opMarginTTM = ttm.revenue ? ttm.operatingIncome / ttm.revenue : null;
+  const netMarginTTM = ttm.revenue ? ttm.netIncome / ttm.revenue : null;
 
-  const marginRow = (label, numeratorKey) => (
-    <tr key={label} className="margin-row">
-      <td className="row-label">{label}</td>
-      {data.slice(0, 5).map((d, i) => {
-        const pct = d.revenue && d[numeratorKey] != null ? d[numeratorKey] / d.revenue : null;
-        return <td key={i} className="center">{fmtPct(pct)}</td>;
-      })}
-    </tr>
-  );
+  const row = (label, key, formatter = fmt, opts = {}) => {
+    const { highlight = false } = opts;
+    return (
+      <tr key={label} className={highlight ? 'subtotal-row' : undefined}>
+        <td className="row-label">{label}</td>
+        {rows5.map((d, i) => (
+          <td key={i} className="number">{formatter(d[key])}</td>
+        ))}
+      </tr>
+    );
+  };
+
+  const marginRow = (label, numeratorKey) => {
+    const pctSeries = rows5.map(d => d.revenue && d[numeratorKey] != null ? d[numeratorKey] / d.revenue : null);
+    return (
+      <tr key={label} className="margin-row">
+        <td className="row-label">{label}</td>
+        {pctSeries.map((pct, i) => (
+          <td key={i} className="center">
+            {pct != null ? <Badge tone="neutral" className="margin-pill">{fmtPct(pct)}</Badge> : '—'}
+          </td>
+        ))}
+      </tr>
+    );
+  };
 
   return (
     <div className="table-wrap">
       <h3>דוח רווח והפסד</h3>
+
+      <div className="income-kpi-strip">
+        <KpiCard title="צמיחת הכנסות (CAGR)" value={revenueCAGR != null ? `${revenueCAGR >= 0 ? '+' : ''}${(revenueCAGR * 100).toFixed(1)}%` : '—'} icon={TrendingUp} />
+        <KpiCard title="שולי רווח גולמי (TTM)" value={fmtPct(grossMarginTTM)} icon={Percent} />
+        <KpiCard title="שולי רווח תפעולי (TTM)" value={fmtPct(opMarginTTM)} icon={Percent} />
+        <KpiCard title="שולי רווח נקי (TTM)" value={fmtPct(netMarginTTM)} icon={Percent} />
+      </div>
+
       <div className="table-scroll">
         <table className="financial-table">
           <thead>
@@ -96,19 +130,19 @@ function IncomeTab({ data, years }) {
             {row('הכנסות', 'revenue')}
             {row('עלות מכר (COGS)', 'costOfRevenue')}
             <tr className="section-divider"><td colSpan={6}></td></tr>
-            {row('רווח גולמי', 'grossProfit')}
+            {row('רווח גולמי', 'grossProfit', fmt, { highlight: true })}
             {marginRow('שיעור רווח גולמי (רווח גולמי ÷ הכנסות)', 'grossProfit')}
             <tr className="section-divider"><td colSpan={6}></td></tr>
             {row('מכירה, הנהלה וכלליות (SG&A)', 'sellingAndMarketingExpenses')}
             {row('מחקר ופיתוח (R&D)', 'otherExpenses')}
             <tr className="section-divider"><td colSpan={6}></td></tr>
-            {row('רווח תפעולי (EBIT)', 'operatingIncome')}
+            {row('רווח תפעולי (EBIT)', 'operatingIncome', fmt, { highlight: true })}
             {marginRow('שיעור רווח תפעולי (רווח תפעולי ÷ הכנסות)', 'operatingIncome')}
             <tr className="section-divider"><td colSpan={6}></td></tr>
             {row('הוצאות מימון (ריבית)', 'interestExpense')}
             {row('מיסים', 'incomeTaxExpense')}
             <tr className="section-divider"><td colSpan={6}></td></tr>
-            {row('רווח נקי', 'netIncome')}
+            {row('רווח נקי', 'netIncome', fmt, { highlight: true })}
             {marginRow('שיעור רווח נקי (רווח נקי ÷ הכנסות)', 'netIncome')}
           </tbody>
         </table>

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Trophy } from 'lucide-react';
+import { Trophy, Landmark, Divide, Award } from 'lucide-react';
 import { getSectorScreener, fmt, fmtRaw } from '../utils/api';
 import SectionHeader from './ui/SectionHeader';
 import SegmentedToggle from './ui/SegmentedToggle';
+import KpiCard from './ui/KpiCard';
 
 const SECTORS = [
   { key: 'technology', label: 'טכנולוגיה' },
@@ -12,6 +13,13 @@ const SECTORS = [
   { key: 'healthcare', label: 'בריאות' },
   { key: 'indices',    label: 'מדדים מובילים' },
 ];
+
+function median(values) {
+  const arr = values.filter((v) => v != null).sort((a, b) => a - b);
+  if (!arr.length) return null;
+  const mid = Math.floor(arr.length / 2);
+  return arr.length % 2 === 0 ? (arr[mid - 1] + arr[mid]) / 2 : arr[mid];
+}
 
 export default function SectorScreener() {
   const [sector, setSector] = useState('technology');
@@ -26,6 +34,11 @@ export default function SectorScreener() {
       .then((d) => { setResult(d); setLoading(false); })
       .catch((e) => { setError('שגיאה: ' + e.message); setLoading(false); });
   }, [sector]);
+
+  const companies = result?.companies || [];
+  const totalMarketCap = companies.reduce((sum, c) => sum + (c.marketCap || 0), 0);
+  const avgPE = median(companies.map((c) => c.pe));
+  const leader = companies[0];
 
   return (
     <div className="calc-luxury">
@@ -50,6 +63,13 @@ export default function SectorScreener() {
 
       {result && !loading && (
         <div className="lux-section">
+          {sector !== 'indices' && companies.length > 0 && (
+            <div className="sector-kpi-bar">
+              <KpiCard title="שווי שוק כולל" value={totalMarketCap ? `$${fmt(totalMarketCap)}` : '—'} icon={Landmark} />
+              <KpiCard title="חציון P/E בסקטור" value={avgPE != null ? `${fmtRaw(avgPE)}x` : '—'} icon={Divide} />
+              <KpiCard title="מוביל הסקטור" value={leader?.name || leader?.symbol || '—'} icon={Award} />
+            </div>
+          )}
           <div className="eps-table-wrap">
             <table className="lux-table">
               <thead>
@@ -64,7 +84,7 @@ export default function SectorScreener() {
                 </tr>
               </thead>
               <tbody>
-                {result.companies.map((c, i) => (
+                {companies.map((c, i) => (
                   <tr key={c.symbol}>
                     <td>{i + 1}</td>
                     <td className="row-lbl">{c.name || c.symbol}<br />{c.symbol}</td>

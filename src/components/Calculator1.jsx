@@ -1,8 +1,35 @@
 import { useState, useEffect } from 'react';
-import { Calculator as CalculatorIcon } from 'lucide-react';
+import { Calculator as CalculatorIcon, DollarSign, Divide, TrendingUp, Target } from 'lucide-react';
 import { getCalcData } from '../utils/api';
 import Tooltip from './ui/Tooltip';
 import SectionHeader from './ui/SectionHeader';
+import KpiCard from './ui/KpiCard';
+import Badge from './ui/Badge';
+
+const SLIDER_CONFIG = {
+  growthRate:    { min: 0,  max: 50, step: 0.5 },
+  pe5:           { min: 5,  max: 70, step: 1   },
+  discount:      { min: 0,  max: 25, step: 0.5 },
+  mos:           { min: 0,  max: 50, step: 1   },
+  revGrowthRate: { min: 0,  max: 40, step: 0.5 },
+};
+
+function SliderRow({ field, value, onChange }) {
+  const { min, max, step } = SLIDER_CONFIG[field];
+  return (
+    <div className="lux-slider-row">
+      <span className="lux-slider-bound">{min}%</span>
+      <input
+        type="range"
+        className="lux-slider"
+        min={min} max={max} step={step}
+        value={value === '' || isNaN(parseFloat(value)) ? min : value}
+        onChange={e => onChange(e.target.value)}
+      />
+      <span className="lux-slider-bound">{max}%</span>
+    </div>
+  );
+}
 
 function fmtNum(n, d = 2) {
   if (n == null || isNaN(n)) return '—';
@@ -85,23 +112,44 @@ export default function Calculator1({ ticker }) {
     <div className="calc-luxury">
       <SectionHeader title="מחשבון הערכת שווי — EPS" description={headerDesc} icon={CalculatorIcon} />
 
+      {/* DCF summary — headline fair value vs market price, once calculated */}
+      {result && (
+        <div className="calc-dcf-summary">
+          <KpiCard title="שווי הוגן (DCF)" value={`$${fmtNum(result.intrinsic)}`} icon={Target} />
+          <KpiCard title="מחיר שוק נוכחי" value={`$${fmtNum(result.mktPrice)}`} icon={DollarSign} />
+        </div>
+      )}
+
+      {/* Current data */}
+      <div className="lux-section">
+        <h3 className="lux-section-title">נתונים פיננסיים נוכחיים (TTM)</h3>
+        <div className="calc-kpi-strip">
+          <KpiCard title="EPS נוכחי (TTM)" value={epsNow != null ? `$${fmtNum(epsNow)}` : '—'} icon={DollarSign} />
+          <KpiCard title="מחיר שוק נוכחי" value={current.price != null ? `$${fmtNum(current.price)}` : '—'} icon={DollarSign} />
+          <KpiCard title="P/E נוכחי" value={current.pe != null ? `${fmtNum(current.pe, 1)}x` : '—'} icon={Divide} />
+          <KpiCard
+            title="הכנסות שנתיות (TTM)"
+            value={history[0]?.revenue != null
+              ? history[0].revenue >= 1e9
+                ? `$${(history[0].revenue / 1e9).toFixed(1)}B`
+                : `$${(history[0].revenue / 1e6).toFixed(0)}M`
+              : '—'}
+            icon={TrendingUp}
+          />
+        </div>
+      </div>
+
       {/* Inputs */}
       <div className="lux-section">
         <h3 className="lux-section-title">הנחות חישוב</h3>
         <div className="lux-inputs-grid">
           <div className="lux-input-item">
             <label>
-              EPS נוכחי (TTM){' '}
-              <Tooltip text="רווח למניה של 12 החודשים האחרונים (Trailing Twelve Months). מחושב מהדוחות של החברה." />
-            </label>
-            <div className="lux-static-val">{epsNow != null ? `$${fmtNum(epsNow)}` : '—'}</div>
-          </div>
-          <div className="lux-input-item">
-            <label>
               קצב צמיחת רווחים % (5 שנים){' '}
               <Tooltip text="הקצב השנתי הצפוי בצמיחת ה-EPS. ניתן להסתמך על תחזיות אנליסטים או על ממוצע הצמיחה ההיסטורית." />
             </label>
             <input type="number" value={growthRate} onChange={e => setGrowthRate(e.target.value)} placeholder="לדוג׳ 15" className="lux-input" />
+            <SliderRow field="growthRate" value={growthRate} onChange={setGrowthRate} />
             {current.analystGrowth5y != null && (
               <span className="lux-hint-inline">אנליסטים: {(current.analystGrowth5y * 100).toFixed(1)}%</span>
             )}
@@ -112,6 +160,7 @@ export default function Calculator1({ ticker }) {
               <Tooltip text="מכפיל הרווח שאתה מניח שהחברה תיסחר בו בשנה ה-5. לרוב מתבסס על הממוצע ההיסטורי של החברה." />
             </label>
             <input type="number" value={pe5} onChange={e => setPe5(e.target.value)} placeholder="לדוג׳ 20" className="lux-input" />
+            <SliderRow field="pe5" value={pe5} onChange={setPe5} />
             {current.pe != null && (
               <span className="lux-hint-inline">P/E נוכחי: {fmtNum(current.pe, 1)}</span>
             )}
@@ -122,6 +171,7 @@ export default function Calculator1({ ticker }) {
               <Tooltip text="תשואה שנתית מינימלית שאתה מצפה לקבל מהשקעה. משמש להוון המחיר העתידי להיום." />
             </label>
             <input type="number" value={discount} onChange={e => setDiscount(e.target.value)} placeholder="לדוג׳ 15" className="lux-input" />
+            <SliderRow field="discount" value={discount} onChange={setDiscount} />
           </div>
           <div className="lux-input-item">
             <label>
@@ -129,23 +179,7 @@ export default function Calculator1({ ticker }) {
               <Tooltip text="הנחה על המחיר ההוגן לצורך הגנה מפני אי-ודאות. לדוגמה: 30% פירושו קנייה ב-70% מהשווי ההוגן." />
             </label>
             <input type="number" value={mos} onChange={e => setMos(e.target.value)} placeholder="30" className="lux-input" />
-          </div>
-          <div className="lux-input-item">
-            <label>מחיר שוק נוכחי</label>
-            <div className="lux-static-val">{current.price != null ? `$${fmtNum(current.price)}` : '—'}</div>
-          </div>
-          <div className="lux-input-item">
-            <label>
-              הכנסות שנתיות (TTM){' '}
-              <Tooltip text="סך הכנסות החברה ב-12 החודשים האחרונים. מחושב מהדוחות הכספיים." />
-            </label>
-            <div className="lux-static-val">
-              {history[0]?.revenue != null
-                ? history[0].revenue >= 1e9
-                  ? `$${(history[0].revenue / 1e9).toFixed(1)}B`
-                  : `$${(history[0].revenue / 1e6).toFixed(0)}M`
-                : '—'}
-            </div>
+            <SliderRow field="mos" value={mos} onChange={setMos} />
           </div>
           <div className="lux-input-item">
             <label>
@@ -159,6 +193,7 @@ export default function Calculator1({ ticker }) {
               placeholder="לדוג׳ 10"
               className="lux-input"
             />
+            <SliderRow field="revGrowthRate" value={revGrowthRate} onChange={setRevGrowthRate} />
             {current.revenueGrowth != null && (
               <span className="lux-hint-inline">אחרון: {(current.revenueGrowth * 100).toFixed(1)}%</span>
             )}
@@ -203,9 +238,18 @@ export default function Calculator1({ ticker }) {
           </div>
 
           <div className={`lux-verdict ${result.isUnder ? 'verdict-buy' : 'verdict-wait'}`}>
-            {result.isUnder
-              ? `✅ המניה נסחרת מתחת למחיר הקנייה — מרווח ביטחון של ${fmtNum(result.mosActual, 1)}%`
-              : `⏳ המניה יקרה מדי — שווי הוגן $${fmtNum(result.intrinsic)} לעומת מחיר שוק $${fmtNum(result.mktPrice)}`}
+            <span>
+              {result.isUnder
+                ? `✅ המניה נסחרת מתחת למחיר הקנייה — מרווח ביטחון של ${fmtNum(result.mosActual, 1)}%`
+                : `⏳ המניה יקרה מדי — שווי הוגן $${fmtNum(result.intrinsic)} לעומת מחיר שוק $${fmtNum(result.mktPrice)}`}
+            </span>
+            {result.mosActual != null && (
+              <Badge tone={result.mosActual >= 0 ? 'positive' : 'negative'}>
+                {result.mosActual >= 0
+                  ? `${fmtNum(result.mosActual, 1)}% מתחת לשווי`
+                  : `${fmtNum(Math.abs(result.mosActual), 1)}% תמחור יתר`}
+              </Badge>
+            )}
           </div>
         </div>
       )}

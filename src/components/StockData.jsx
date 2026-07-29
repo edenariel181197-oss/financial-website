@@ -107,7 +107,7 @@ export default function StockData({ ticker, showInsights = true }) {
 
   const changePos = quote.changePercent >= 0;
 
-  // Determine chart color: blue accent if flat/unknown, green/red for clear move
+  // Determine chart color: green/red for clear move
   const chartColor = changePos ? '#22C55E' : '#EF4444';
 
   const priceChartData = priceHistory.map(d => ({
@@ -168,7 +168,7 @@ export default function StockData({ ticker, showInsights = true }) {
         {chartLoading ? (
           <div className="price-chart-loading">טוען גרף...</div>
         ) : priceChartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={340}>
+          <ResponsiveContainer width="100%" height={380}>
             <AreaChart data={priceChartData} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
