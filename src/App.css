@@ -587,10 +587,6 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
   display: flex; gap: 0.85rem; flex-wrap: wrap; margin-bottom: 1.25rem;
 }
 .metrics-grid .ui-kpi-card { min-width: 160px; flex: 1; }
-.sector-kpi-bar {
-  display: flex; gap: 0.85rem; flex-wrap: wrap; margin-bottom: 1.25rem;
-}
-.sector-kpi-bar .ui-kpi-card { min-width: 180px; flex: 1; }
 .quarterly-tables { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .q-table-wrap h4 {
   font-size: 0.72rem; color: var(--slate); margin-bottom: 0.5rem;
@@ -1315,7 +1311,6 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
 
   /* Metric cards — wrap nicely */
   .metrics-grid .ui-kpi-card,
-  .sector-kpi-bar .ui-kpi-card,
   .calc-kpi-strip .ui-kpi-card,
   .calc-dcf-summary .ui-kpi-card,
   .income-kpi-strip .ui-kpi-card { min-width: 130px; }

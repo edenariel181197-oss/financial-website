@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Trophy, Landmark, Divide, Award } from 'lucide-react';
+import { Trophy, TrendingUp, TrendingDown } from 'lucide-react';
 import { getSectorScreener, fmt, fmtRaw } from '../utils/api';
 import SectionHeader from './ui/SectionHeader';
 import SegmentedToggle from './ui/SegmentedToggle';
-import KpiCard from './ui/KpiCard';
 
 const SECTORS = [
   { key: 'technology', label: 'טכנולוגיה' },
@@ -11,15 +10,9 @@ const SECTORS = [
   { key: 'cyber',      label: 'סייבר' },
   { key: 'energy',     label: 'אנרגיה' },
   { key: 'healthcare', label: 'בריאות' },
+  { key: 'chips',      label: 'שבבים' },
   { key: 'indices',    label: 'מדדים מובילים' },
 ];
-
-function median(values) {
-  const arr = values.filter((v) => v != null).sort((a, b) => a - b);
-  if (!arr.length) return null;
-  const mid = Math.floor(arr.length / 2);
-  return arr.length % 2 === 0 ? (arr[mid - 1] + arr[mid]) / 2 : arr[mid];
-}
 
 export default function SectorScreener() {
   const [sector, setSector] = useState('technology');
@@ -36,9 +29,6 @@ export default function SectorScreener() {
   }, [sector]);
 
   const companies = result?.companies || [];
-  const totalMarketCap = companies.reduce((sum, c) => sum + (c.marketCap || 0), 0);
-  const avgPE = median(companies.map((c) => c.pe));
-  const leader = companies[0];
 
   return (
     <div className="calc-luxury">
@@ -63,13 +53,6 @@ export default function SectorScreener() {
 
       {result && !loading && (
         <div className="lux-section">
-          {sector !== 'indices' && companies.length > 0 && (
-            <div className="sector-kpi-bar">
-              <KpiCard title="שווי שוק כולל" value={totalMarketCap ? `$${fmt(totalMarketCap)}` : '—'} icon={Landmark} />
-              <KpiCard title="חציון P/E בסקטור" value={avgPE != null ? `${fmtRaw(avgPE)}x` : '—'} icon={Divide} />
-              <KpiCard title="מוביל הסקטור" value={leader?.name || leader?.symbol || '—'} icon={Award} />
-            </div>
-          )}
           <div className="eps-table-wrap">
             <table className="lux-table">
               <thead>
@@ -77,6 +60,7 @@ export default function SectorScreener() {
                   <th>#</th>
                   <th>חברה</th>
                   <th>מחיר</th>
+                  <th>שינוי יומי</th>
                   <th>P/E</th>
                   <th>P/B</th>
                   <th>EV/EBITDA</th>
@@ -84,17 +68,28 @@ export default function SectorScreener() {
                 </tr>
               </thead>
               <tbody>
-                {companies.map((c, i) => (
-                  <tr key={c.symbol}>
-                    <td>{i + 1}</td>
-                    <td className="row-lbl">{c.name || c.symbol}<br />{c.symbol}</td>
-                    <td>{c.price != null ? `$${fmtRaw(c.price)}` : '—'}</td>
-                    <td>{fmtRaw(c.pe)}</td>
-                    <td>{fmtRaw(c.pb)}</td>
-                    <td>{fmtRaw(c.evToEbitda)}</td>
-                    <td>{c.marketCap != null ? `$${fmt(c.marketCap)}` : '—'}</td>
-                  </tr>
-                ))}
+                {companies.map((c, i) => {
+                  const changePos = c.changePercent >= 0;
+                  return (
+                    <tr key={c.symbol}>
+                      <td>{i + 1}</td>
+                      <td className="row-lbl">{c.name || c.symbol}<br />{c.symbol}</td>
+                      <td>{c.price != null ? `$${fmtRaw(c.price)}` : '—'}</td>
+                      <td>
+                        {c.changePercent != null ? (
+                          <span className={changePos ? 'positive' : 'negative'} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {changePos ? <TrendingUp size={13} strokeWidth={2.5} /> : <TrendingDown size={13} strokeWidth={2.5} />}
+                            <span dir="ltr">{changePos ? '+' : ''}{c.changePercent.toFixed(2)}%</span>
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td>{fmtRaw(c.pe)}</td>
+                      <td>{fmtRaw(c.pb)}</td>
+                      <td>{fmtRaw(c.evToEbitda)}</td>
+                      <td>{c.marketCap != null ? `$${fmt(c.marketCap)}` : '—'}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
