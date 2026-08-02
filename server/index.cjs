@@ -270,6 +270,7 @@ async function getQuoteData(ticker) {
     fetchTimeSeries(t, [
       'annualDilutedEPS', 'annualNetIncomeRatio', 'annualPeRatio', 'annualTotalRevenue', 'annualNetIncome', 'annualShareIssued',
       'annualCommonStockEquity', 'annualEBITDA', 'annualLongTermDebt', 'annualCurrentDebt', 'annualCashAndCashEquivalents',
+      'annualOperatingIncome', 'annualFreeCashFlow', 'annualCashDividendsPaid',
     ]),
     fetchSummary(t, ['summaryDetail', 'defaultKeyStatistics', 'financialData']),
   ]);
@@ -302,6 +303,22 @@ async function getQuoteData(ticker) {
   const enterpriseValue = marketCap != null ? marketCap + (ltd ?? 0) + (std ?? 0) - (cash ?? 0) : null;
   const evToEbitda = ks.enterpriseToEbitda ?? (enterpriseValue && ebitda ? enterpriseValue / ebitda : null);
 
+  // Same quoteSummary-unreliable reasoning as above — fall back to timeseries fundamentals
+  // for every comparison-table metric that has one available.
+  const revenueSeries = tsMap.annualTotalRevenue || [];
+  const revenueGrowthFallback = (revenueSeries[0]?.value != null && revenueSeries[1]?.value)
+    ? (revenueSeries[0].value - revenueSeries[1].value) / Math.abs(revenueSeries[1].value)
+    : null;
+  const operatingIncome = latest(tsMap, 'annualOperatingIncome');
+  const operatingMarginFallback = (operatingIncome != null && tsRevenue) ? operatingIncome / tsRevenue : null;
+  const roeFallback = (tsNetIncome != null && equity) ? tsNetIncome / equity : null;
+  const freeCashFlowFallback = latest(tsMap, 'annualFreeCashFlow');
+  const debtToEquityFallback = (equity && (ltd != null || std != null)) ? ((ltd ?? 0) + (std ?? 0)) / equity : null;
+  const cashDividendsPaid = latest(tsMap, 'annualCashDividendsPaid');
+  const dividendYieldFallback = (cashDividendsPaid && sharesOutstanding && price)
+    ? Math.abs(cashDividendsPaid) / sharesOutstanding / price
+    : null;
+
   return {
     symbol: t,
     name: chart.name,
@@ -315,6 +332,16 @@ async function getQuoteData(ticker) {
     netMargin,
     marketCap,
     sharesOutstanding,
+    // Used by the stock-comparison table (Compare.jsx) — all pulled from the same
+    // financialData/summaryDetail modules already fetched above, no extra requests.
+    forwardPE: sd.forwardPE ?? ks.forwardPE ?? null,
+    revenueGrowth: fd.revenueGrowth ?? revenueGrowthFallback,
+    operatingMargin: fd.operatingMargins ?? operatingMarginFallback,
+    roe: fd.returnOnEquity ?? roeFallback,
+    freeCashFlow: fd.freeCashflow ?? freeCashFlowFallback,
+    // Yahoo returns debtToEquity as a percentage-style number (e.g. 145 = 1.45x) — normalize to a plain ratio.
+    debtToEquity: fd.debtToEquity != null ? fd.debtToEquity / 100 : debtToEquityFallback,
+    dividendYield: sd.dividendYield ?? dividendYieldFallback,
   };
 }
 

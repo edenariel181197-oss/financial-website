@@ -496,6 +496,84 @@ h1, h2, h3 { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; font-weight: 7
 .compare-form { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
 .compare-form .ticker-input { width: 160px; }
 
+/* ── Stock comparison table (Compare.jsx) — sticky header + sticky RTL label column ── */
+.compare-seed-chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.9rem; }
+.compare-seed-chip {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  background: var(--card); border: 1px solid var(--border); border-radius: 999px;
+  padding: 0.35rem 0.5rem 0.35rem 0.9rem; font-size: 0.8rem; font-weight: 700; color: var(--pearl);
+}
+.compare-seed-chip button {
+  background: transparent; border: none; color: var(--text-secondary); cursor: pointer;
+  width: 18px; height: 18px; border-radius: 50%; font-size: 0.65rem;
+  display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+}
+.compare-seed-chip button:hover { background: var(--negative-bg); color: var(--negative); }
+
+.compare-table-wrap {
+  overflow: auto;
+  max-height: 640px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.compare-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; min-width: 620px; }
+
+.compare-table thead th {
+  position: sticky; top: 0; z-index: 3;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  padding: 0;
+}
+.compare-row-label-col { position: sticky; right: 0; z-index: 4; background: var(--card); min-width: 200px; }
+
+.compare-company-head { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.2rem; padding: 1.1rem 1rem 0.9rem; min-width: 130px; }
+.compare-remove-btn {
+  position: absolute; top: 0.35rem; left: 0.5rem;
+  background: transparent; border: none; color: var(--text-secondary); cursor: pointer;
+  font-size: 0.7rem; line-height: 1; width: 20px; height: 20px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+}
+.compare-remove-btn:hover { background: var(--negative-bg); color: var(--negative); }
+.compare-company-name { font-weight: 700; color: var(--pearl); font-size: 0.88rem; text-align: center; }
+.compare-company-ticker { color: var(--accent); font-size: 0.74rem; font-weight: 600; }
+
+.compare-add-col { min-width: 72px; text-align: center; }
+.compare-add-btn {
+  background: transparent; border: 1px dashed var(--border); color: var(--text-secondary);
+  width: 34px; height: 34px; border-radius: 50%; font-size: 1.05rem; cursor: pointer; transition: all 0.15s;
+}
+.compare-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+.compare-add-input {
+  width: 88px; background: var(--bg-secondary); border: 1px solid var(--accent);
+  border-radius: var(--radius-sm); color: var(--pearl); padding: 0.4rem 0.5rem;
+  text-align: center; font-size: 0.8rem; outline: none;
+}
+
+.compare-table td {
+  padding: 0.85rem 1.1rem;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  transition: background 0.15s ease;
+}
+.compare-table tbody tr:last-child td { border-bottom: none; }
+.compare-table tbody tr:nth-child(even) td:not(.compare-row-label) { background: rgba(255,255,255,0.015); }
+
+.compare-row-label {
+  position: sticky; right: 0; z-index: 2;
+  background: var(--card);
+  text-align: right;
+  border-left: 1px solid var(--border);
+  white-space: nowrap;
+}
+.compare-row-label-inner { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--text-secondary); font-weight: 500; font-size: 0.8rem; }
+
+@media (max-width: 768px) {
+  .compare-table { min-width: 520px; }
+  .compare-row-label-col, .compare-row-label { min-width: 150px; }
+}
+
 /* ── STOCK PANEL ── */
 .stock-panel-wrapper {
   background: var(--bg-secondary);

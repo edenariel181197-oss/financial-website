@@ -2,89 +2,194 @@ import { useState } from 'react';
 import { ArrowLeftRight } from 'lucide-react';
 import { getQuote, fmt, fmtPct, fmtRaw } from '../utils/api';
 import SectionHeader from './ui/SectionHeader';
+import Tooltip from './ui/Tooltip';
 
 const MAX_TICKERS = 5;
+const MIN_TICKERS = 2;
 
 const ROWS = [
-  { label: 'מחיר', get: (q) => (q.price != null ? `$${fmtRaw(q.price)}` : '—') },
-  { label: 'שווי שוק', get: (q) => (q.marketCap != null ? `$${fmt(q.marketCap)}` : '—') },
-  { label: 'P/E', get: (q) => fmtRaw(q.pe) },
-  { label: 'P/B', get: (q) => fmtRaw(q.pb) },
-  { label: 'EV/EBITDA', get: (q) => fmtRaw(q.evToEbitda) },
-  { label: 'EPS (TTM)', get: (q) => (q.eps != null ? `$${fmtRaw(q.eps)}` : '—') },
-  { label: 'שולי רווח נקי', get: (q) => fmtPct(q.netMargin) },
+  {
+    key: 'pe', label: 'מכפיל רווח (P/E)',
+    tooltip: 'מחיר המניה חלקי הרווח למניה - כמה משלמים על כל דולר של רווח שנתי',
+    get: (q) => fmtRaw(q.pe),
+  },
+  {
+    key: 'revenueGrowth', label: 'צמיחת הכנסות (YoY)',
+    tooltip: 'קצב הגידול בהכנסות לעומת אותה תקופה אשתקד',
+    get: (q) => fmtPct(q.revenueGrowth),
+  },
+  {
+    key: 'operatingMargin', label: 'שולי רווח תפעולי',
+    tooltip: 'אחוז מההכנסות שהופך לרווח מהפעילות הליבה, לפני ריבית ומס',
+    get: (q) => fmtPct(q.operatingMargin),
+  },
+  {
+    key: 'roe', label: 'תשואה על ההון (ROE)',
+    tooltip: 'רווח נקי חלקי הון עצמי - כמה יעילה החברה בהפקת רווח מכסף בעלי המניות',
+    get: (q) => fmtPct(q.roe),
+  },
+  {
+    key: 'freeCashFlow', label: 'תזרים מזומנים חופשי (FCF)',
+    tooltip: 'המזומן שנותר לחברה אחרי כל ההוצאות התפעוליות וההשקעות ברכוש קבוע',
+    get: (q) => (q.freeCashFlow != null ? `$${fmt(q.freeCashFlow)}` : '—'),
+  },
+  {
+    key: 'debtToEquity', label: 'יחס חוב להון (D/E)',
+    tooltip: 'סך החוב חלקי ההון העצמי - ככל שגבוה יותר כך המינוף הפיננסי גבוה יותר',
+    get: (q) => (q.debtToEquity != null ? `${fmtRaw(q.debtToEquity)}x` : '—'),
+  },
+  {
+    key: 'dividendYield', label: 'תשואת דיבידנד',
+    tooltip: 'הדיבידנד השנתי כאחוז ממחיר המניה הנוכחי',
+    get: (q) => fmtPct(q.dividendYield),
+  },
 ];
 
 export default function Compare() {
-  const [inputs, setInputs] = useState(['', '', '', '', '']);
-  const [quotes, setQuotes] = useState(null);
+  const [quotes, setQuotes] = useState([]);
+  const [pendingInput, setPendingInput] = useState('');
+  const [addingSlot, setAddingSlot] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  function handleInputChange(i, value) {
-    setInputs((prev) => prev.map((v, idx) => (idx === i ? value : v)));
-  }
-
-  function handleSubmit(e) {
-    e.preventDefault();
-    const tickers = inputs.map((t) => t.trim().toUpperCase()).filter(Boolean).slice(0, MAX_TICKERS);
-    if (tickers.length < 2) {
-      setError('הכנס לפחות שתי מניות להשוואה');
+  async function addTicker(raw) {
+    const symbol = raw.trim().toUpperCase();
+    if (!symbol) { setAddingSlot(false); return; }
+    if (quotes.some((q) => q.symbol === symbol)) {
+      setError(`${symbol} כבר בהשוואה`);
       return;
     }
+    if (quotes.length >= MAX_TICKERS) return;
     setError(null);
     setLoading(true);
-    Promise.all(tickers.map((t) => getQuote(t).then((q) => ({ ...q, symbol: q.symbol || t }))))
-      .then((results) => { setQuotes(results); setLoading(false); })
-      .catch((e) => { setError('שגיאה: ' + e.message); setLoading(false); });
+    try {
+      const q = await getQuote(symbol);
+      setQuotes((prev) => [...prev, { ...q, symbol: q.symbol || symbol }]);
+      setPendingInput('');
+      setAddingSlot(false);
+    } catch {
+      setError(`לא נמצאו נתונים עבור ${symbol}`);
+    } finally {
+      setLoading(false);
+    }
   }
+
+  function removeTicker(symbol) {
+    setQuotes((prev) => prev.filter((q) => q.symbol !== symbol));
+  }
+
+  const hasTable = quotes.length >= MIN_TICKERS;
 
   return (
     <div className="calc-luxury">
       <SectionHeader
         title="השוואת מניות"
-        description={`הכנס עד ${MAX_TICKERS} טיקרים כדי להשוות ביניהם זה לצד זה`}
+        description={`השוו בין ${MIN_TICKERS} ל-${MAX_TICKERS} מניות זו לצד זו לפי 7 מדדי יסוד`}
         icon={ArrowLeftRight}
       />
 
-      <div className="lux-section">
-        <form className="compare-form" onSubmit={handleSubmit}>
-          {inputs.map((val, i) => (
-            <input
-              key={i}
-              className="ticker-input"
-              placeholder={`טיקר ${i + 1}${i < 2 ? '' : ' (אופציונלי)'}`}
-              value={val}
-              onChange={(e) => handleInputChange(i, e.target.value)}
-            />
-          ))}
-          <button className="ticker-btn" type="submit">השווה</button>
-        </form>
-        {error && <div className="data-error">{error}</div>}
-      </div>
-
-      {loading && <div className="data-loading">טוען נתונים...</div>}
-
-      {quotes && !loading && (
+      {!hasTable && (
         <div className="lux-section">
-          <div className="eps-table-wrap">
-            <table className="lux-table">
+          <form
+            className="compare-form"
+            onSubmit={(e) => { e.preventDefault(); addTicker(pendingInput); }}
+          >
+            <input
+              className="ticker-input"
+              placeholder="הכנס טיקר, למשל AAPL"
+              value={pendingInput}
+              onChange={(e) => setPendingInput(e.target.value)}
+            />
+            <button className="ticker-btn" type="submit" disabled={loading}>
+              {loading ? 'טוען...' : 'הוסף לטבלה'}
+            </button>
+          </form>
+          {quotes.length > 0 && (
+            <div className="compare-seed-chips">
+              {quotes.map((q) => (
+                <span key={q.symbol} className="compare-seed-chip">
+                  {q.symbol}
+                  <button onClick={() => removeTicker(q.symbol)} aria-label="הסר">✕</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <p className="lux-hint" style={{ marginTop: '0.75rem' }}>
+            הוסיפו לפחות {MIN_TICKERS} חברות כדי לפתוח את טבלת ההשוואה
+          </p>
+        </div>
+      )}
+
+      {error && <div className="data-error">{error}</div>}
+
+      {hasTable && (
+        <div className="lux-section">
+          <div className="compare-table-wrap">
+            <table className="compare-table">
               <thead>
                 <tr>
-                  <th>מדד</th>
-                  {quotes.map((q) => <th key={q.symbol}>{q.name || q.symbol}<br />{q.symbol}</th>)}
+                  <th className="compare-row-label-col"></th>
+                  {quotes.map((q) => (
+                    <th key={q.symbol}>
+                      <div className="compare-company-head">
+                        <button
+                          className="compare-remove-btn"
+                          onClick={() => removeTicker(q.symbol)}
+                          aria-label={`הסר ${q.symbol}`}
+                          title="הסר מההשוואה"
+                        >
+                          ✕
+                        </button>
+                        <div className="compare-company-name">{q.name || q.symbol}</div>
+                        <div className="compare-company-ticker">${q.symbol}</div>
+                      </div>
+                    </th>
+                  ))}
+                  {quotes.length < MAX_TICKERS && (
+                    <th className="compare-add-col">
+                      {addingSlot ? (
+                        <form onSubmit={(e) => { e.preventDefault(); addTicker(pendingInput); }}>
+                          <input
+                            autoFocus
+                            className="compare-add-input"
+                            value={pendingInput}
+                            onChange={(e) => setPendingInput(e.target.value)}
+                            onBlur={() => { if (!pendingInput) setAddingSlot(false); }}
+                            placeholder="טיקר"
+                          />
+                        </form>
+                      ) : (
+                        <button
+                          className="compare-add-btn"
+                          onClick={() => setAddingSlot(true)}
+                          aria-label="הוסף חברה"
+                          title="הוסף חברה להשוואה"
+                        >
+                          +
+                        </button>
+                      )}
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {ROWS.map((row) => (
-                  <tr key={row.label}>
-                    <td className="row-lbl">{row.label}</td>
-                    {quotes.map((q) => <td key={q.symbol}>{row.get(q)}</td>)}
+                  <tr key={row.key}>
+                    <td className="compare-row-label">
+                      <span className="compare-row-label-inner">
+                        {row.label}
+                        <Tooltip text={row.tooltip} />
+                      </span>
+                    </td>
+                    {quotes.map((q) => (
+                      <td key={q.symbol}>{row.get(q)}</td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {loading && <div className="data-loading">טוען...</div>}
         </div>
       )}
     </div>
