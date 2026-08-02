@@ -451,6 +451,45 @@ app.get('/api/income/:ticker', async (req, res) => {
   }
 });
 
+// Income statement - quarterly (mirrors /api/income but with quarterly* fields, last 8 quarters)
+app.get('/api/income-quarterly/:ticker', async (req, res) => {
+  try {
+    const t = req.params.ticker.toUpperCase();
+    const map = await fetchTimeSeries(t, [
+      'quarterlyTotalRevenue', 'quarterlyCostOfRevenue', 'quarterlyGrossProfit', 'quarterlyGrossProfitRatio',
+      'quarterlySellingGeneralAndAdministration', 'quarterlyGeneralAndAdministrativeExpense',
+      'quarterlyResearchAndDevelopment', 'quarterlyOtherGandA',
+      'quarterlyOperatingIncome', 'quarterlyOperatingIncomeRatio',
+      'quarterlyNetInterestIncome', 'quarterlyInterestExpense',
+      'quarterlyTaxProvision', 'quarterlyIncomeTaxExpense',
+      'quarterlyNetIncome', 'quarterlyNetIncomeCommonStockholders', 'quarterlyNetIncomeRatio',
+    ]);
+    const allDates = Object.values(map).flatMap(s => s.map(p => p.date));
+    const dates = [...new Set(allDates)].sort((a, b) => b.localeCompare(a)).slice(0, 8);
+    res.json(dates.map(date => ({
+      date,
+      revenue: getVal(map, 'quarterlyTotalRevenue', date),
+      costOfRevenue: getVal(map, 'quarterlyCostOfRevenue', date),
+      grossProfit: getVal(map, 'quarterlyGrossProfit', date),
+      grossProfitRatio: getVal(map, 'quarterlyGrossProfitRatio', date),
+      sellingAndMarketingExpenses: getVal(map, 'quarterlySellingGeneralAndAdministration', date),
+      generalAndAdministrativeExpenses: getVal(map, 'quarterlyGeneralAndAdministrativeExpense', date)
+        ?? getVal(map, 'quarterlyOtherGandA', date),
+      otherExpenses: getVal(map, 'quarterlyResearchAndDevelopment', date),
+      operatingIncome: getVal(map, 'quarterlyOperatingIncome', date),
+      operatingIncomeRatio: getVal(map, 'quarterlyOperatingIncomeRatio', date),
+      interestExpense: getVal(map, 'quarterlyInterestExpense', date),
+      incomeTaxExpense: getVal(map, 'quarterlyTaxProvision', date)
+        ?? getVal(map, 'quarterlyIncomeTaxExpense', date),
+      netIncome: getVal(map, 'quarterlyNetIncome', date),
+      netIncomeRatio: getVal(map, 'quarterlyNetIncomeRatio', date),
+    })));
+  } catch (e) {
+    console.error('API ERROR /income-quarterly:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Balance sheet
 app.get('/api/balance/:ticker', async (req, res) => {
   try {
@@ -635,12 +674,14 @@ app.get('/api/charts/:ticker', async (req, res) => {
       fetchTimeSeries(t, [
         'annualTotalRevenue', 'annualNetIncome', 'annualPeRatio',
         'annualTotalAssets', 'annualTotalLiabilitiesNetMinorityInterest',
+        'annualTotalEquityGrossMinorityInterest', 'annualCommonStockEquity',
         'annualChangesInCash', 'annualDilutedEPS',
         'annualOperatingCashFlow', 'annualInvestingCashFlow', 'annualFinancingCashFlow',
       ]),
       fetchTimeSeries(t, [
         'quarterlyTotalRevenue', 'quarterlyNetIncome', 'quarterlyDilutedEPS', 'quarterlyPeRatio',
         'quarterlyTotalAssets', 'quarterlyTotalLiabilitiesNetMinorityInterest', 'quarterlyChangesInCash',
+        'quarterlyTotalEquityGrossMinorityInterest', 'quarterlyCommonStockEquity',
         'quarterlyOperatingCashFlow', 'quarterlyInvestingCashFlow', 'quarterlyFinancingCashFlow',
       ]),
     ]);
@@ -652,6 +693,8 @@ app.get('/api/charts/:ticker', async (req, res) => {
       netIncome: getVal(annualMap, 'annualNetIncome', date),
       totalAssets: getVal(annualMap, 'annualTotalAssets', date),
       totalLiabilities: getVal(annualMap, 'annualTotalLiabilitiesNetMinorityInterest', date),
+      totalEquity: getVal(annualMap, 'annualTotalEquityGrossMinorityInterest', date)
+        ?? getVal(annualMap, 'annualCommonStockEquity', date),
       cashChange: getVal(annualMap, 'annualChangesInCash', date),
       pe: getVal(annualMap, 'annualPeRatio', date),
       eps: getVal(annualMap, 'annualDilutedEPS', date),
@@ -678,6 +721,8 @@ app.get('/api/charts/:ticker', async (req, res) => {
       eps: getVal(quarterlyMap, 'quarterlyDilutedEPS', date),
       totalAssets: getVal(quarterlyMap, 'quarterlyTotalAssets', date),
       totalLiabilities: getVal(quarterlyMap, 'quarterlyTotalLiabilitiesNetMinorityInterest', date),
+      totalEquity: getVal(quarterlyMap, 'quarterlyTotalEquityGrossMinorityInterest', date)
+        ?? getVal(quarterlyMap, 'quarterlyCommonStockEquity', date),
       cashChange: getVal(quarterlyMap, 'quarterlyChangesInCash', date),
       pe: getVal(quarterlyMap, 'quarterlyPeRatio', date),
       operatingCashFlow: getVal(quarterlyMap, 'quarterlyOperatingCashFlow', date),

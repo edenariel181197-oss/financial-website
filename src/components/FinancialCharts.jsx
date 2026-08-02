@@ -11,7 +11,7 @@ const fmtB = (v) => v == null ? '—' : `$${(v / 1e9).toFixed(1)}B`;
 
 const COLORS = {
   revenue: '#4F82C8', netIncome: '#22C55E',
-  assets: '#7AA3D8', liabilities: '#EF4444',
+  assets: '#7AA3D8', liabilities: '#EF4444', equity: '#34D399',
   cash: '#F59E0B', pe: '#9B8BD4',
   pos: '#22C55E', neg: '#EF4444',
   operating: '#4F8CFF', investing: '#9B8BD4', financing: '#38BDF8',
@@ -152,7 +152,7 @@ export default function FinancialCharts({ ticker }) {
 
   const incomeData = incomeMode === 'annual' ? charts.annual : (charts.quarterly || []).slice(-16);
   const assetsData = (assetsMode === 'annual' ? charts.annual : (charts.quarterly || []).slice(-16))
-    .filter(d => d.totalAssets != null || d.totalLiabilities != null);
+    .filter(d => d.totalAssets != null || d.totalLiabilities != null || d.totalEquity != null);
   const cashData = (cashMode === 'annual' ? charts.annual : (charts.quarterly || []).slice(-16))
     .filter(d => d.cashChange != null);
   const peData = (peMode === 'annual' ? charts.annual : (charts.quarterly || []).slice(-16))
@@ -215,10 +215,10 @@ export default function FinancialCharts({ ticker }) {
         data={charts}
       />
 
-      {/* נכסים מול התחייבויות */}
+      {/* נכסים מול התחייבויות והון עצמי */}
       <div className="chart-card">
         <div className="chart-header">
-          <h3>סך נכסים מול סך התחייבויות</h3>
+          <h3>נכסים, התחייבויות והון עצמי</h3>
           <div className="chart-toggle">
             <button className={assetsMode === 'annual' ? 'active' : ''} onClick={() => setAssetsMode('annual')}>שנתי</button>
             <button className={assetsMode === 'quarterly' ? 'active' : ''} onClick={() => setAssetsMode('quarterly')}>רבעוני</button>
@@ -238,6 +238,10 @@ export default function FinancialCharts({ ticker }) {
                   <stop offset="5%" stopColor={COLORS.liabilities} stopOpacity={0.95} />
                   <stop offset="95%" stopColor={COLORS.liabilities} stopOpacity={0.55} />
                 </linearGradient>
+                <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={COLORS.equity} stopOpacity={0.95} />
+                  <stop offset="95%" stopColor={COLORS.equity} stopOpacity={0.55} />
+                </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="date" tick={{ fill: 'var(--text-secondary)', fontSize: assetsMode === 'quarterly' ? 10 : 11 }} interval={assetsMode === 'quarterly' ? 0 : undefined} angle={assetsMode === 'quarterly' ? -35 : 0} textAnchor={assetsMode === 'quarterly' ? 'end' : 'middle'} height={assetsMode === 'quarterly' ? 45 : 30} />
@@ -246,6 +250,7 @@ export default function FinancialCharts({ ticker }) {
               <Legend wrapperStyle={{ color: 'var(--text-secondary)', fontSize: 12 }} />
               <Bar dataKey="totalAssets"      name="סך נכסים"      fill="url(#assetsGrad)" radius={[4, 4, 0, 0]} />
               <Bar dataKey="totalLiabilities" name="סך התחייבויות" fill="url(#liabGrad)"   radius={[4, 4, 0, 0]} />
+              <Bar dataKey="totalEquity"      name="הון עצמי"      fill="url(#equityGrad)" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}

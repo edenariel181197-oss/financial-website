@@ -27,7 +27,7 @@ export async function getCashFlow(ticker) {
 }
 
 export async function getIncomeStatementQuarterly(ticker) {
-  const { data } = await axios.get(`${BASE}/quarterly/${ticker}`);
+  const { data } = await axios.get(`${BASE}/income-quarterly/${ticker}`);
   return data;
 }
 

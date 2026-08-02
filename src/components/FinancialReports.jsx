@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { FileText, TrendingUp, Percent } from 'lucide-react';
-import { getIncomeStatement, getBalanceSheet, getCashFlow, getRatios, fmt, fmtPct, fmtRaw } from '../utils/api';
+import { getIncomeStatement, getIncomeStatementQuarterly, getBalanceSheet, getCashFlow, getRatios, fmt, fmtPct, fmtRaw } from '../utils/api';
 import SectionHeader from './ui/SectionHeader';
 import SegmentedToggle from './ui/SegmentedToggle';
 import KpiCard from './ui/KpiCard';
@@ -18,9 +18,17 @@ function calcCAGR(rows, key) {
   return Math.pow(newest / oldest, 1 / years) - 1;
 }
 
+// "2026-06-30" -> "Q2 2026"
+function quarterLabel(dateStr) {
+  if (!dateStr) return '';
+  const [y, m] = dateStr.split('-');
+  const q = Math.ceil(Number(m) / 3);
+  return `Q${q} ${y}`;
+}
+
 export default function FinancialReports({ ticker }) {
   const [activeTab, setActiveTab] = useState(0);
-  const [data, setData] = useState({ income: null, balance: null, cashflow: null, ratios: null });
+  const [data, setData] = useState({ income: null, incomeQuarterly: null, balance: null, cashflow: null, ratios: null });
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(null);
@@ -32,11 +40,12 @@ export default function FinancialReports({ ticker }) {
     setError(null);
     Promise.all([
       getIncomeStatement(ticker),
+      getIncomeStatementQuarterly(ticker),
       getBalanceSheet(ticker),
       getCashFlow(ticker),
       getRatios(ticker),
-    ]).then(([income, balance, cashflow, ratios]) => {
-      setData({ income, balance, cashflow, ratios });
+    ]).then(([income, incomeQuarterly, balance, cashflow, ratios]) => {
+      setData({ income, incomeQuarterly, balance, cashflow, ratios });
       setLoaded(true);
       setLoading(false);
     }).catch(() => {
@@ -63,7 +72,7 @@ export default function FinancialReports({ ticker }) {
         ))}
       </div>
 
-      {activeTab === 0 && <IncomeTab data={data.income} years={years} />}
+      {activeTab === 0 && <IncomeTab data={data.income} quarterlyData={data.incomeQuarterly} years={years} />}
       {activeTab === 1 && <BalanceTab data={data.balance} years={years} />}
       {activeTab === 2 && <CashFlowTab data={data.cashflow} years={years} />}
       {activeTab === 3 && <RatiosTab ratios={data.ratios} />}
@@ -71,12 +80,21 @@ export default function FinancialReports({ ticker }) {
   );
 }
 
-function IncomeTab({ data, years }) {
-  if (!data?.length) return <div className="no-data">אין נתונים</div>;
+function IncomeTab({ data, quarterlyData, years }) {
+  const [mode, setMode] = useState('annual');
+  const isQuarterly = mode === 'quarterly';
+  const sourceRows = isQuarterly ? quarterlyData : data;
 
-  const rows5 = data.slice(0, 5);
+  if (!sourceRows?.length) return <div className="no-data">אין נתונים</div>;
+
+  const rows5 = sourceRows.slice(0, 5);
+  const colLabels = isQuarterly ? rows5.map(d => quarterLabel(d.date)) : years;
+  const periodLabel = isQuarterly ? 'רבעון אחרון' : 'TTM';
   const ttm = rows5[0];
-  const revenueCAGR = calcCAGR(rows5, 'revenue');
+  const growthLabel = isQuarterly ? 'צמיחת הכנסות (רבעון מול רבעון)' : 'צמיחת הכנסות (CAGR)';
+  const growthValue = isQuarterly
+    ? ((rows5[1]?.revenue && ttm.revenue != null) ? (ttm.revenue - rows5[1].revenue) / Math.abs(rows5[1].revenue) : null)
+    : calcCAGR(rows5, 'revenue');
   const grossMarginTTM = (ttm.revenue && ttm.grossProfit != null) ? ttm.grossProfit / ttm.revenue : null;
   const opMarginTTM = (ttm.revenue && ttm.operatingIncome != null) ? ttm.operatingIncome / ttm.revenue : null;
   const netMarginTTM = (ttm.revenue && ttm.netIncome != null) ? ttm.netIncome / ttm.revenue : null;
@@ -109,13 +127,20 @@ function IncomeTab({ data, years }) {
 
   return (
     <div className="table-wrap">
-      <h3>דוח רווח והפסד</h3>
+      <div className="table-wrap-head">
+        <h3>דוח רווח והפסד</h3>
+        <SegmentedToggle
+          options={[{ key: 'annual', label: 'שנתי' }, { key: 'quarterly', label: 'רבעוני' }]}
+          value={mode}
+          onChange={setMode}
+        />
+      </div>
 
       <div className="income-kpi-strip">
-        <KpiCard title="צמיחת הכנסות (CAGR)" value={revenueCAGR != null ? `${revenueCAGR >= 0 ? '+' : ''}${(revenueCAGR * 100).toFixed(1)}%` : '—'} icon={TrendingUp} />
-        <KpiCard title="שולי רווח גולמי (TTM)" value={fmtPct(grossMarginTTM)} icon={Percent} />
-        <KpiCard title="שולי רווח תפעולי (TTM)" value={fmtPct(opMarginTTM)} icon={Percent} />
-        <KpiCard title="שולי רווח נקי (TTM)" value={fmtPct(netMarginTTM)} icon={Percent} />
+        <KpiCard title={growthLabel} value={growthValue != null ? `${growthValue >= 0 ? '+' : ''}${(growthValue * 100).toFixed(1)}%` : '—'} icon={TrendingUp} />
+        <KpiCard title={`שולי רווח גולמי (${periodLabel})`} value={fmtPct(grossMarginTTM)} icon={Percent} />
+        <KpiCard title={`שולי רווח תפעולי (${periodLabel})`} value={fmtPct(opMarginTTM)} icon={Percent} />
+        <KpiCard title={`שולי רווח נקי (${periodLabel})`} value={fmtPct(netMarginTTM)} icon={Percent} />
       </div>
 
       <div className="table-scroll">
@@ -123,7 +148,7 @@ function IncomeTab({ data, years }) {
           <thead>
             <tr>
               <th>סעיף</th>
-              {years.map(y => <th key={y}>{y}</th>)}
+              {colLabels.map((label, i) => <th key={i}>{label}</th>)}
             </tr>
           </thead>
           <tbody>
