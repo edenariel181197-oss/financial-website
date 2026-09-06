@@ -113,8 +113,13 @@ async function fetchTimeSeries(ticker, types) {
   return map;
 }
 
-function getYears(map) {
-  const allDates = Object.values(map).flatMap(s => s.map(p => p.date));
+// Defaults to only 'annual*' keys — some maps now also carry 'quarterly*' series (added
+// for TTM computations) alongside the annual ones, and mixing quarter-end dates into a
+// "5 fiscal years" list would crowd out the actual annual dates.
+function getYears(map, prefix = 'annual') {
+  const allDates = Object.entries(map)
+    .filter(([key]) => key.startsWith(prefix))
+    .flatMap(([, series]) => series.map(p => p.date));
   return [...new Set(allDates)].sort((a, b) => b.localeCompare(a)).slice(0, 5);
 }
 
@@ -124,6 +129,32 @@ function getVal(map, key, date) {
 
 function latest(map, key) {
   return (map[key] || [])[0]?.value ?? null;
+}
+
+// Trailing-twelve-month sum of a quarterly flow metric (revenue, net income,
+// diluted EPS, EBITDA, FCF, dividends paid, etc). `offset` skips the most
+// recent N quarters first — offset=4 gives the TTM window ending one year
+// ago, used for YoY growth comparisons against the current TTM window.
+// Returns null (never a partial/misleading sum) if fewer than 4 quarters of
+// data exist at that offset, so callers can fall through to the next source.
+function ttmSum(map, key, offset = 0, count = 4) {
+  const points = (map[key] || []).slice(offset, offset + count);
+  if (points.length < count) return null;
+  return points.reduce((sum, p) => sum + (p.value ?? 0), 0);
+}
+
+// Most recent reported value for a balance-sheet-style "point in time"
+// metric (equity, debt, cash, shares outstanding) — quarterly filings are
+// more current than the last annual one, so this compares the latest point
+// across both series (given first-elements only, already sorted newest-first
+// by fetchTimeSeries) and returns whichever has the later asOfDate.
+function mostRecentOf(map, ...keys) {
+  let best = null;
+  for (const key of keys) {
+    const p = (map[key] || [])[0];
+    if (p && p.value != null && (!best || new Date(p.date) > new Date(best.date))) best = p;
+  }
+  return best ? best.value : null;
 }
 
 // ── Rule-based investment thesis (V1, free — no AI) ───────────────
@@ -271,6 +302,14 @@ async function getQuoteData(ticker) {
       'annualDilutedEPS', 'annualNetIncomeRatio', 'annualPeRatio', 'annualTotalRevenue', 'annualNetIncome', 'annualShareIssued',
       'annualCommonStockEquity', 'annualEBITDA', 'annualLongTermDebt', 'annualCurrentDebt', 'annualCashAndCashEquivalents',
       'annualOperatingIncome', 'annualFreeCashFlow', 'annualCashDividendsPaid',
+      // Quarterly counterparts — used to build trailing-twelve-month (TTM) figures for flow
+      // metrics and "most recent reported" figures for balance-sheet metrics, since quoteSummary
+      // (the source of Yahoo's own live trailingPE/trailingEps/etc) is unreliable/frequently
+      // blocked, and the annual-only figures above can lag up to a year behind for fast-growing
+      // companies (e.g. NVDA: FY2026 annual diluted EPS $4.90 vs actual TTM ~$7.91 as of 9/2026).
+      'quarterlyDilutedEPS', 'quarterlyTotalRevenue', 'quarterlyNetIncome', 'quarterlyShareIssued',
+      'quarterlyCommonStockEquity', 'quarterlyEBITDA', 'quarterlyLongTermDebt', 'quarterlyCurrentDebt',
+      'quarterlyCashAndCashEquivalents', 'quarterlyOperatingIncome', 'quarterlyFreeCashFlow', 'quarterlyCashDividendsPaid',
     ]),
     fetchSummary(t, ['summaryDetail', 'defaultKeyStatistics', 'financialData']),
   ]);
@@ -279,42 +318,61 @@ async function getQuoteData(ticker) {
   const ks = summary.defaultKeyStatistics || {};
   const fd = summary.financialData || {};
 
-  const tsRevenue = latest(tsMap, 'annualTotalRevenue');
-  const tsNetIncome = latest(tsMap, 'annualNetIncome');
+  // Flow metrics: prefer trailing-twelve-month (sum of last 4 quarters) over the stale
+  // once-a-year annual figure, whenever 4 quarters of data are actually available.
+  const tsRevenue = ttmSum(tsMap, 'quarterlyTotalRevenue') ?? latest(tsMap, 'annualTotalRevenue');
+  const tsNetIncome = ttmSum(tsMap, 'quarterlyNetIncome') ?? latest(tsMap, 'annualNetIncome');
   const netMargin = fd.profitMargins
-    ?? latest(tsMap, 'annualNetIncomeRatio')
-    ?? (tsRevenue && tsNetIncome ? tsNetIncome / tsRevenue : null);
+    ?? (tsRevenue && tsNetIncome != null ? tsNetIncome / tsRevenue : null)
+    ?? latest(tsMap, 'annualNetIncomeRatio');
 
-  const sharesOutstanding = ks.sharesOutstanding ?? chart.sharesOutstanding ?? latest(tsMap, 'annualShareIssued');
+  // Balance-sheet ("point in time") metrics: prefer whichever of the quarterly/annual series
+  // has the most recently reported date, since a quarterly filing can be newer than the last
+  // annual one.
+  const sharesOutstanding = ks.sharesOutstanding ?? chart.sharesOutstanding
+    ?? mostRecentOf(tsMap, 'quarterlyShareIssued', 'annualShareIssued');
   const price = chart.price;
   const marketCap = chart.marketCap ?? (sharesOutstanding && price ? sharesOutstanding * price : null);
 
   // quoteSummary (defaultKeyStatistics) is unreliable/frequently blocked — fall back to
   // computing P/B and EV/EBITDA from the more reliable timeseries fundamentals, same
   // reasoning as the existing timeseries-over-quoteSummary preference used elsewhere.
-  const equity = latest(tsMap, 'annualCommonStockEquity');
+  const equity = mostRecentOf(tsMap, 'quarterlyCommonStockEquity', 'annualCommonStockEquity');
   const bookValuePerShare = (equity && sharesOutstanding) ? equity / sharesOutstanding : null;
   const pb = ks.priceToBook ?? (price && bookValuePerShare ? price / bookValuePerShare : null);
 
-  const ebitda = latest(tsMap, 'annualEBITDA');
-  const ltd = latest(tsMap, 'annualLongTermDebt');
-  const std = latest(tsMap, 'annualCurrentDebt');
-  const cash = latest(tsMap, 'annualCashAndCashEquivalents');
+  const ebitda = ttmSum(tsMap, 'quarterlyEBITDA') ?? latest(tsMap, 'annualEBITDA');
+  const ltd = mostRecentOf(tsMap, 'quarterlyLongTermDebt', 'annualLongTermDebt');
+  const std = mostRecentOf(tsMap, 'quarterlyCurrentDebt', 'annualCurrentDebt');
+  const cash = mostRecentOf(tsMap, 'quarterlyCashAndCashEquivalents', 'annualCashAndCashEquivalents');
   const enterpriseValue = marketCap != null ? marketCap + (ltd ?? 0) + (std ?? 0) - (cash ?? 0) : null;
   const evToEbitda = ks.enterpriseToEbitda ?? (enterpriseValue && ebitda ? enterpriseValue / ebitda : null);
 
+  // Trailing diluted EPS — same TTM-over-annual preference, reused for both the eps and
+  // pe fields below. This is the fix for the reported bug: a stale annual EPS understates
+  // fast-growing companies' true trailing earnings, which inflates the displayed P/E.
+  const ttmEPS = ttmSum(tsMap, 'quarterlyDilutedEPS');
+  const eps = ks.trailingEps ?? ttmEPS ?? latest(tsMap, 'annualDilutedEPS');
+  const pe = sd.trailingPE ?? (price && ttmEPS ? price / ttmEPS : null) ?? latest(tsMap, 'annualPeRatio');
+
   // Same quoteSummary-unreliable reasoning as above — fall back to timeseries fundamentals
-  // for every comparison-table metric that has one available.
-  const revenueSeries = tsMap.annualTotalRevenue || [];
-  const revenueGrowthFallback = (revenueSeries[0]?.value != null && revenueSeries[1]?.value)
-    ? (revenueSeries[0].value - revenueSeries[1].value) / Math.abs(revenueSeries[1].value)
+  // for every comparison-table metric that has one available. Revenue growth compares the
+  // current TTM window against the TTM window ending 4 quarters earlier (true trailing YoY),
+  // falling back to annual-vs-annual only when a full 8 quarters of data isn't available.
+  const ttmRevenueYearAgo = ttmSum(tsMap, 'quarterlyTotalRevenue', 4);
+  const annualRevenueSeries = tsMap.annualTotalRevenue || [];
+  const annualRevenueGrowth = (annualRevenueSeries[0]?.value != null && annualRevenueSeries[1]?.value)
+    ? (annualRevenueSeries[0].value - annualRevenueSeries[1].value) / Math.abs(annualRevenueSeries[1].value)
     : null;
-  const operatingIncome = latest(tsMap, 'annualOperatingIncome');
+  const revenueGrowthFallback = (tsRevenue != null && ttmRevenueYearAgo)
+    ? (tsRevenue - ttmRevenueYearAgo) / Math.abs(ttmRevenueYearAgo)
+    : annualRevenueGrowth;
+  const operatingIncome = ttmSum(tsMap, 'quarterlyOperatingIncome') ?? latest(tsMap, 'annualOperatingIncome');
   const operatingMarginFallback = (operatingIncome != null && tsRevenue) ? operatingIncome / tsRevenue : null;
   const roeFallback = (tsNetIncome != null && equity) ? tsNetIncome / equity : null;
-  const freeCashFlowFallback = latest(tsMap, 'annualFreeCashFlow');
+  const freeCashFlowFallback = ttmSum(tsMap, 'quarterlyFreeCashFlow') ?? latest(tsMap, 'annualFreeCashFlow');
   const debtToEquityFallback = (equity && (ltd != null || std != null)) ? ((ltd ?? 0) + (std ?? 0)) / equity : null;
-  const cashDividendsPaid = latest(tsMap, 'annualCashDividendsPaid');
+  const cashDividendsPaid = ttmSum(tsMap, 'quarterlyCashDividendsPaid') ?? latest(tsMap, 'annualCashDividendsPaid');
   const dividendYieldFallback = (cashDividendsPaid && sharesOutstanding && price)
     ? Math.abs(cashDividendsPaid) / sharesOutstanding / price
     : null;
@@ -325,10 +383,10 @@ async function getQuoteData(ticker) {
     price,
     change: chart.change,
     changePercent: chart.changePercent,
-    pe: sd.trailingPE ?? latest(tsMap, 'annualPeRatio'),
+    pe,
     pb,
     evToEbitda,
-    eps: ks.trailingEps ?? latest(tsMap, 'annualDilutedEPS'),
+    eps,
     netMargin,
     marketCap,
     sharesOutstanding,
@@ -832,29 +890,48 @@ app.get('/api/profile/:ticker', async (req, res) => {
         'annualFreeCashFlow', 'annualTotalDebt', 'annualCashAndCashEquivalents',
         'annualShareIssued', 'annualReturnOnEquity',
         'annualCommonStockEquity', 'annualEBITDA',
+        // Quarterly counterparts for TTM/most-recent accuracy — same fix and reasoning as
+        // getQuoteData (this endpoint never even attempted quoteSummary's live trailingPE,
+        // so it went straight to the stale annual figure). Yahoo doesn't expose quarterly
+        // ROE/gross-margin *ratios* directly, so those are recomputed below from quarterly
+        // net income/gross profit/revenue instead.
+        'quarterlyTotalRevenue', 'quarterlyNetIncome', 'quarterlyGrossProfit', 'quarterlyDilutedEPS',
+        'quarterlyFreeCashFlow', 'quarterlyTotalDebt', 'quarterlyCashAndCashEquivalents',
+        'quarterlyShareIssued', 'quarterlyCommonStockEquity', 'quarterlyEBITDA',
       ]).catch(() => ({})),
       fetchFMPProfile(t).catch(() => ({})),
     ]);
 
     const companyName = chart.name || t;
 
-    // Financial metrics from timeseries
+    // Financial metrics from timeseries — TTM (trailing twelve months) preferred over the
+    // stale once-a-year annual figure; see getQuoteData for the full reasoning + a worked
+    // example (NVDA: annual EPS $4.90 vs true TTM ~$7.91 as of 9/2026, inflating P/E 47 vs
+    // the real ~29). latestPE now feeds directly into the investment thesis verdict below,
+    // so this bug wasn't just a display issue — it could misprice the whole thesis.
     const fmtPct = v => v != null ? (v * 100).toFixed(1) + '%' : null;
-    const latestRevenue    = latest(tsMap, 'annualTotalRevenue');
-    const prevRevenue      = (tsMap.annualTotalRevenue || [])[1]?.value ?? null;
-    const latestNetIncome  = latest(tsMap, 'annualNetIncome');
-    const latestEPS        = latest(tsMap, 'annualDilutedEPS');
-    const latestPE         = latest(tsMap, 'annualPeRatio');
-    const latestDebt       = latest(tsMap, 'annualTotalDebt');
-    const latestCash       = latest(tsMap, 'annualCashAndCashEquivalents');
-    const latestFCF        = latest(tsMap, 'annualFreeCashFlow');
-    const netMarginRaw     = latest(tsMap, 'annualNetIncomeRatio')
-                          ?? (latestRevenue && latestNetIncome ? latestNetIncome / latestRevenue : null);
-    const grossMarginRaw   = latest(tsMap, 'annualGrossProfitRatio');
-    const roeRaw           = latest(tsMap, 'annualReturnOnEquity');
-    const equity           = latest(tsMap, 'annualCommonStockEquity');
-    const ebitda           = latest(tsMap, 'annualEBITDA');
-    const sharesOut        = latest(tsMap, 'annualShareIssued');
+    const ttmRevenueNow    = ttmSum(tsMap, 'quarterlyTotalRevenue');
+    const ttmRevenueYearAgo = ttmSum(tsMap, 'quarterlyTotalRevenue', 4);
+    const latestRevenue    = ttmRevenueNow ?? latest(tsMap, 'annualTotalRevenue');
+    // Growth-rate comparison must use a matched pair (both TTM, or both annual) — never mix
+    // a TTM "now" figure against an annual "prior year" figure, which would overstate growth.
+    const prevRevenue      = (ttmRevenueNow != null && ttmRevenueYearAgo != null)
+      ? ttmRevenueYearAgo
+      : (ttmRevenueNow == null ? ((tsMap.annualTotalRevenue || [])[1]?.value ?? null) : null);
+    const latestNetIncome  = ttmSum(tsMap, 'quarterlyNetIncome') ?? latest(tsMap, 'annualNetIncome');
+    const latestEPS        = ttmSum(tsMap, 'quarterlyDilutedEPS') ?? latest(tsMap, 'annualDilutedEPS');
+    const latestPE         = (chart.price && latestEPS) ? chart.price / latestEPS : latest(tsMap, 'annualPeRatio');
+    const latestDebt       = mostRecentOf(tsMap, 'quarterlyTotalDebt', 'annualTotalDebt');
+    const latestCash       = mostRecentOf(tsMap, 'quarterlyCashAndCashEquivalents', 'annualCashAndCashEquivalents');
+    const latestFCF        = ttmSum(tsMap, 'quarterlyFreeCashFlow') ?? latest(tsMap, 'annualFreeCashFlow');
+    const netMarginRaw     = (latestRevenue && latestNetIncome != null ? latestNetIncome / latestRevenue : null)
+                          ?? latest(tsMap, 'annualNetIncomeRatio');
+    const ttmGrossProfit   = ttmSum(tsMap, 'quarterlyGrossProfit');
+    const grossMarginRaw   = (ttmGrossProfit != null && latestRevenue) ? ttmGrossProfit / latestRevenue : latest(tsMap, 'annualGrossProfitRatio');
+    const equity           = mostRecentOf(tsMap, 'quarterlyCommonStockEquity', 'annualCommonStockEquity');
+    const roeRaw           = (latestNetIncome != null && equity) ? latestNetIncome / equity : latest(tsMap, 'annualReturnOnEquity');
+    const ebitda           = ttmSum(tsMap, 'quarterlyEBITDA') ?? latest(tsMap, 'annualEBITDA');
+    const sharesOut        = mostRecentOf(tsMap, 'quarterlyShareIssued', 'annualShareIssued');
 
     const revenueGrowthRaw = (latestRevenue && prevRevenue && prevRevenue !== 0)
       ? (latestRevenue - prevRevenue) / Math.abs(prevRevenue) * 100
@@ -1087,7 +1164,12 @@ app.get('/api/calc-data/:ticker', async (req, res) => {
   try {
     const t = req.params.ticker.toUpperCase();
     const [map, chart, summary] = await Promise.all([
-      fetchTimeSeries(t, ['annualDilutedEPS', 'annualTotalRevenue', 'annualNetIncome', 'annualNetIncomeRatio', 'annualPeRatio', 'annualShareIssued']),
+      fetchTimeSeries(t, [
+        'annualDilutedEPS', 'annualTotalRevenue', 'annualNetIncome', 'annualNetIncomeRatio', 'annualPeRatio', 'annualShareIssued',
+        // Quarterly counterparts, used only for the "current" TTM snapshot below — the
+        // year-by-year `history` chart intentionally stays annual (it's showing fiscal years).
+        'quarterlyDilutedEPS', 'quarterlyTotalRevenue', 'quarterlyNetIncome', 'quarterlyShareIssued',
+      ]),
       fetchChart(t),
       fetchSummary(t, ['financialData', 'defaultKeyStatistics', 'summaryDetail', 'earningsTrend']),
     ]);
@@ -1111,27 +1193,38 @@ app.get('/api/calc-data/:ticker', async (req, res) => {
     const sd = summary.summaryDetail || {};
     const trend5y = summary.earningsTrend?.trend?.find(tr => tr.period === '+5y');
 
-    const sharesOutstanding = ks.sharesOutstanding ?? chart.sharesOutstanding ?? latest(map, 'annualShareIssued');
+    const sharesOutstanding = ks.sharesOutstanding ?? chart.sharesOutstanding
+      ?? mostRecentOf(map, 'quarterlyShareIssued', 'annualShareIssued');
     const price = fd.currentPrice ?? chart.price ?? null;
     const marketCap = chart.marketCap ?? (sharesOutstanding && price ? sharesOutstanding * price : null);
 
-    const tsRevenue = latest(map, 'annualTotalRevenue');
-    const tsNetIncome = latest(map, 'annualNetIncome');
+    // Same TTM-over-stale-annual fix as getQuoteData (see comment there) — the "current"
+    // snapshot pre-fills the calculator's starting assumptions and must reflect trailing
+    // twelve months, not whatever the last full fiscal year happened to report.
+    const tsRevenue = ttmSum(map, 'quarterlyTotalRevenue') ?? latest(map, 'annualTotalRevenue');
+    const tsNetIncome = ttmSum(map, 'quarterlyNetIncome') ?? latest(map, 'annualNetIncome');
     const latestNetMargin = fd.profitMargins
+      ?? (tsRevenue && tsNetIncome != null ? tsNetIncome / tsRevenue : null)
       ?? latest(map, 'annualNetIncomeRatio')
-      ?? (tsRevenue && tsNetIncome ? tsNetIncome / tsRevenue : null)
       ?? history[0]?.netMargin ?? null;
+    const ttmEPS = ttmSum(map, 'quarterlyDilutedEPS');
+    const currentPe = sd.trailingPE ?? (price && ttmEPS ? price / ttmEPS : null) ?? latest(map, 'annualPeRatio');
+    const currentEps = ks.trailingEps ?? ttmEPS ?? latest(map, 'annualDilutedEPS');
 
+    const ttmRevenueYearAgo = ttmSum(map, 'quarterlyTotalRevenue', 4);
     const lastIdx = history.length - 1;
-    const calcRevenueGrowth = (lastIdx >= 1 && history[lastIdx]?.revenue && history[lastIdx - 1]?.revenue && history[lastIdx - 1].revenue !== 0)
+    const annualRevenueGrowth = (lastIdx >= 1 && history[lastIdx]?.revenue && history[lastIdx - 1]?.revenue && history[lastIdx - 1].revenue !== 0)
       ? (history[lastIdx].revenue - history[lastIdx - 1].revenue) / Math.abs(history[lastIdx - 1].revenue) : null;
+    const calcRevenueGrowth = (tsRevenue != null && ttmRevenueYearAgo)
+      ? (tsRevenue - ttmRevenueYearAgo) / Math.abs(ttmRevenueYearAgo)
+      : annualRevenueGrowth;
 
     res.json({
       history,
       current: {
         price,
-        pe: sd.trailingPE ?? latest(map, 'annualPeRatio'),
-        eps: ks.trailingEps ?? latest(map, 'annualDilutedEPS'),
+        pe: currentPe,
+        eps: currentEps,
         netMargin: latestNetMargin,
         marketCap,
         sharesOutstanding,
