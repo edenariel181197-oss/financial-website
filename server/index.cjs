@@ -841,12 +841,21 @@ app.get('/api/charts/:ticker', async (req, res) => {
 // Forward P/E via Alpha Vantage (free tier — requires ALPHA_VANTAGE_API_KEY env var).
 // Yahoo's own forward-estimate data (quoteSummary/earningsTrend) is blocked with no free
 // replacement (see fetchSummary), so this is best-effort: cached hard per ticker for 24h to
-// stretch the free tier's tiny daily quota (~25 requests/day) across repeat views, and backs
-// off entirely for an hour the moment Alpha Vantage signals the quota is used up, instead of
-// burning what's left of the day's quota on requests that are just going to fail anyway.
+// stretch the free tier's tiny daily quota (~25 requests/day) across repeat views.
+//
+// Alpha Vantage returns two very different conditions the same way — HTTP 200 with an
+// "Information" field and no Symbol, no HTTP error code:
+//  1. Per-second pacing ("...spreading out your free API requests more sparingly (1 request
+//     per second)") — purely transient; a request one second later succeeds fine. Verified
+//     live: back-to-back calls tripped this, and a bare retry immediately after returned full
+//     data. This must NOT trigger a long backoff, or one burst of traffic locks out the whole
+//     site for an hour over nothing.
+//  2. Actual daily quota exhausted (message mentions "per day") — real for the rest of the
+//     day; only this case should back off for a long stretch, so the tiny daily quota isn't
+//     wasted retrying requests that are certain to fail again.
 const forwardPECache = {};
 const FORWARD_PE_TTL_MS = 24 * 60 * 60 * 1000;
-let avBackoffUntil = 0;
+let avDailyBackoffUntil = 0;
 
 async function fetchForwardPE(ticker) {
   const key = process.env.ALPHA_VANTAGE_API_KEY;
@@ -854,16 +863,20 @@ async function fetchForwardPE(ticker) {
   const t = ticker.toUpperCase();
   const cached = forwardPECache[t];
   if (cached && Date.now() - cached.fetchedAt < FORWARD_PE_TTL_MS) return cached.value;
-  if (Date.now() < avBackoffUntil) return cached?.value ?? null;
+  if (Date.now() < avDailyBackoffUntil) return cached?.value ?? null;
   try {
     const url = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${t}&apikey=${key}`;
     const r = await fetch(url, { headers: YF_HEADERS });
     const d = await r.json();
-    // A quota/rate-limit response comes back as HTTP 200 with a "Note"/"Information" field
-    // and no actual data (no Symbol) — not an HTTP error, so it must be checked explicitly.
-    if (d.Note || d.Information || d['Error Message'] || !d.Symbol) {
-      console.log('Alpha Vantage: quota/error response, backing off 1h:', JSON.stringify(d).slice(0, 150));
-      avBackoffUntil = Date.now() + 60 * 60 * 1000;
+    const limitMsg = d.Note || d.Information || d['Error Message'];
+    if (limitMsg || !d.Symbol) {
+      if (/per day|daily/i.test(limitMsg || '')) {
+        console.log('Alpha Vantage: daily quota exhausted, backing off until tomorrow:', limitMsg.slice(0, 150));
+        const tomorrow = new Date(); tomorrow.setUTCHours(24, 0, 0, 0);
+        avDailyBackoffUntil = tomorrow.getTime();
+      } else {
+        console.log('Alpha Vantage: transient response (likely per-second pacing), not backing off:', (limitMsg || 'no Symbol in response').slice(0, 150));
+      }
       return cached?.value ?? null;
     }
     const value = (d.ForwardPE && d.ForwardPE !== 'None' && !isNaN(d.ForwardPE)) ? Number(d.ForwardPE) : null;
