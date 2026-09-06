@@ -3,7 +3,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { TrendingUp, TrendingDown, Landmark, Divide, DollarSign, Percent } from 'lucide-react';
+import { TrendingUp, TrendingDown, Landmark, Divide, DollarSign, Percent, CalendarClock } from 'lucide-react';
 import { getQuote, getChartData, getPriceHistory, getProfile, fmtPct, fmtRaw } from '../utils/api';
 import KpiCard from './ui/KpiCard';
 import useCountUp from './ui/useCountUp';
@@ -224,6 +224,7 @@ export default function StockData({ ticker, showInsights = true }) {
         {[
           { label: 'שווי שוק', val: fmtMC(quote.marketCap ?? (quote.sharesOutstanding && quote.price ? quote.sharesOutstanding * quote.price : null)), icon: Landmark },
           { label: 'P/E', val: fmtRaw(quote.pe), icon: Divide },
+          { label: 'P/E עתידי', val: fmtRaw(quote.forwardPE), icon: CalendarClock },
           { label: 'EPS (TTM)', val: `$${fmtRaw(quote.eps)}`, icon: DollarSign },
           { label: 'שולי רווח נקי', val: fmtPct(quote.netMargin), icon: Percent },
         ].map(({ label, val, icon }) => (

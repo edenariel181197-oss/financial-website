@@ -294,7 +294,10 @@ function buildThesis({ pe, revenueGrowthRaw, netMarginRaw, latestDebt, latestCas
 // ════════════════════════════════════════════════════════════════
 
 // Quote
-async function getQuoteData(ticker) {
+// `includeForwardPE: false` is used by the sector screener's bulk fetch (up to ~10 tickers
+// per sector) so a single screener refresh can't burn through Alpha Vantage's whole daily
+// quota on tickers that aren't even being viewed individually right now.
+async function getQuoteData(ticker, { includeForwardPE = true } = {}) {
   const t = ticker.toUpperCase();
   const [chart, tsMap, summary] = await Promise.all([
     fetchChart(t),
@@ -377,6 +380,11 @@ async function getQuoteData(ticker) {
     ? Math.abs(cashDividendsPaid) / sharesOutstanding / price
     : null;
 
+  // sd.forwardPE/ks.forwardPE would come from quoteSummary, which is currently always empty
+  // (see fetchSummary) — Alpha Vantage is the only fallback, and only for single-ticker
+  // lookups (see includeForwardPE above), never for bulk/screener calls.
+  const forwardPE = sd.forwardPE ?? ks.forwardPE ?? (includeForwardPE ? await fetchForwardPE(t) : null);
+
   return {
     symbol: t,
     name: chart.name,
@@ -390,9 +398,8 @@ async function getQuoteData(ticker) {
     netMargin,
     marketCap,
     sharesOutstanding,
-    // Used by the stock-comparison table (Compare.jsx) — all pulled from the same
-    // financialData/summaryDetail modules already fetched above, no extra requests.
-    forwardPE: sd.forwardPE ?? ks.forwardPE ?? null,
+    // Used by the stock-comparison table (Compare.jsx) and the main stock page's KPI grid.
+    forwardPE,
     revenueGrowth: fd.revenueGrowth ?? revenueGrowthFallback,
     operatingMargin: fd.operatingMargins ?? operatingMarginFallback,
     roe: fd.returnOnEquity ?? roeFallback,
@@ -428,7 +435,7 @@ async function computeSectorScreener(sectorKey) {
   for (let i = 0; i < sector.tickers.length; i += batchSize) {
     const batch = sector.tickers.slice(i, i + batchSize);
     const batchResults = await Promise.all(
-      batch.map((t) => getQuoteData(t).catch((e) => {
+      batch.map((t) => getQuoteData(t, { includeForwardPE: false }).catch((e) => {
         console.error(`sector screener: failed to fetch ${t}:`, e.message);
         return null;
       }))
@@ -830,6 +837,43 @@ app.get('/api/charts/:ticker', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+// Forward P/E via Alpha Vantage (free tier — requires ALPHA_VANTAGE_API_KEY env var).
+// Yahoo's own forward-estimate data (quoteSummary/earningsTrend) is blocked with no free
+// replacement (see fetchSummary), so this is best-effort: cached hard per ticker for 24h to
+// stretch the free tier's tiny daily quota (~25 requests/day) across repeat views, and backs
+// off entirely for an hour the moment Alpha Vantage signals the quota is used up, instead of
+// burning what's left of the day's quota on requests that are just going to fail anyway.
+const forwardPECache = {};
+const FORWARD_PE_TTL_MS = 24 * 60 * 60 * 1000;
+let avBackoffUntil = 0;
+
+async function fetchForwardPE(ticker) {
+  const key = process.env.ALPHA_VANTAGE_API_KEY;
+  if (!key) return null;
+  const t = ticker.toUpperCase();
+  const cached = forwardPECache[t];
+  if (cached && Date.now() - cached.fetchedAt < FORWARD_PE_TTL_MS) return cached.value;
+  if (Date.now() < avBackoffUntil) return cached?.value ?? null;
+  try {
+    const url = `https://www.alphavantage.co/query?function=OVERVIEW&symbol=${t}&apikey=${key}`;
+    const r = await fetch(url, { headers: YF_HEADERS });
+    const d = await r.json();
+    // A quota/rate-limit response comes back as HTTP 200 with a "Note"/"Information" field
+    // and no actual data (no Symbol) — not an HTTP error, so it must be checked explicitly.
+    if (d.Note || d.Information || d['Error Message'] || !d.Symbol) {
+      console.log('Alpha Vantage: quota/error response, backing off 1h:', JSON.stringify(d).slice(0, 150));
+      avBackoffUntil = Date.now() + 60 * 60 * 1000;
+      return cached?.value ?? null;
+    }
+    const value = (d.ForwardPE && d.ForwardPE !== 'None' && !isNaN(d.ForwardPE)) ? Number(d.ForwardPE) : null;
+    forwardPECache[t] = { value, fetchedAt: Date.now() };
+    return value;
+  } catch (e) {
+    console.error('Alpha Vantage fetch error:', e.message);
+    return cached?.value ?? null;
+  }
+}
 
 // Fetch company info from FMP (free tier — requires FMP_API_KEY env var)
 async function fetchFMPProfile(ticker) {
